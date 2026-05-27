@@ -109,7 +109,9 @@ One layer. Multiple MCP servers. Smart prioritization. Low overhead.
 
 ---
 
-## Project Structure
+## Planned Project Structure
+
+Once API access is available, the project will be organized as follows:
 
 ```
 mcp-orchestrator/
@@ -131,6 +133,8 @@ mcp-orchestrator/
 ├── requirements.txt
 └── README.md
 ```
+
+> This is the proposed architecture. Structure may evolve as development progresses.
 
 ---
 

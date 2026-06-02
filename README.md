@@ -9,7 +9,7 @@
 [![MCP](https://img.shields.io/badge/Protocol-MCP-blue?style=for-the-badge&logo=chainlink&logoColor=white)](https://modelcontextprotocol.io/)
 [![Python](https://img.shields.io/badge/Python-3.11+-green?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Status](https://img.shields.io/badge/Status-WIP-orange?style=for-the-badge)]()
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)]()
+[![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)]()
 [![Swiggy](https://img.shields.io/badge/Swiggy-Builder's_Club-FC8019?style=for-the-badge&logo=swiggy&logoColor=white)](https://mcp.swiggy.com/builders/)
 
 <br>
@@ -205,7 +205,7 @@ This project is in early development. Contributions, ideas, and feedback are wel
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+All Rights Reserved — see [LICENSE](LICENSE) for details.
 
 ---
 

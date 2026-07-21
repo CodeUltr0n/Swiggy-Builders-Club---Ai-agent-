@@ -1,11 +1,17 @@
 # Example MCP server configuration
+# NOTE: For local development, keep API keys out of source control.
+# Recommended: set credentials via environment variables and update servers.yaml in deployment.
+# The MCPClient will return mocked responses when api_key is missing or left as REPLACE_WITH_KEY.
 servers:
   food:
     url: "https://mcp.swiggy.com/food"
-    api_key: "REPLACE_WITH_KEY"
+    # api_key: "REPLACE_WITH_KEY"  # <- replace or set via secure storage / env var
   instamart:
     url: "https://mcp.swiggy.com/instamart"
-    api_key: "REPLACE_WITH_KEY"
+    # api_key: "REPLACE_WITH_KEY"
   dineout:
     url: "https://mcp.swiggy.com/dineout"
-    api_key: "REPLACE_WITH_KEY"
+    # api_key: "REPLACE_WITH_KEY"
+
+# Example: in production, load secrets from environment and write a deployment-only servers.yaml
+# or use a secrets manager. Do NOT commit real API keys to the repository.

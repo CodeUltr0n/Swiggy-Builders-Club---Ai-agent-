@@ -3,7 +3,7 @@ import os
 import time
 import logging
 from logging.handlers import RotatingFileHandler
-
+from orchestrator.mcp_client import MCPClient
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "orchestrator.log")
@@ -49,6 +49,14 @@ def main() -> None:
     if pidfile:
         _write_pidfile(pidfile)
         logging.info("Wrote pidfile: %s", pidfile)
+
+        # Demo: make a safe MCP client call (mocked when no API key configured)
+        try:
+            client = MCPClient()
+            demo = client.search_restaurants("biryani")
+            logging.info("MCPClient demo result: %s", demo)
+        except Exception:
+            logging.exception("MCPClient demo failed")
 
     try:
         logging.info("Run: python -m orchestrator; logs at %s", LOG_FILE)

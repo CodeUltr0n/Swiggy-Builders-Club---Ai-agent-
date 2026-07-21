@@ -1,0 +1,11 @@
+# Example MCP server configuration
+servers:
+  food:
+    url: "https://mcp.swiggy.com/food"
+    api_key: "REPLACE_WITH_KEY"
+  instamart:
+    url: "https://mcp.swiggy.com/instamart"
+    api_key: "REPLACE_WITH_KEY"
+  dineout:
+    url: "https://mcp.swiggy.com/dineout"
+    api_key: "REPLACE_WITH_KEY"

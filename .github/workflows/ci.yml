@@ -12,6 +12,9 @@ jobs:
       matrix:
         python-version: ['3.11']
 
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+
     steps:
       - uses: actions/checkout@v4
 

@@ -1,0 +1,35 @@
+# Environment & Secret Credentials (CRITICAL)
+.env
+.env.*
+*.env
+*.pem
+*.key
+credentials.json
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local SQLite Database & Runtime Logs
+*.db
+*.sqlite
+*.log
+orchestrator.db
+
+# OS & IDE Files
+.DS_Store
+.vscode/
+.idea/
+.gemini/
+*.swp

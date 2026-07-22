@@ -1,0 +1,13 @@
+servers:
+  food:
+    name: "swiggy-food"
+    production_url: "https://mcp.swiggy.com/food"
+    staging_url: "https://mcp-staging.swiggy.com/food"
+  instamart:
+    name: "swiggy-instamart"
+    production_url: "https://mcp.swiggy.com/im"
+    staging_url: "https://mcp-staging.swiggy.com/im"
+  dineout:
+    name: "swiggy-dineout"
+    production_url: "https://mcp.swiggy.com/dineout"
+    staging_url: "https://mcp-staging.swiggy.com/dineout"

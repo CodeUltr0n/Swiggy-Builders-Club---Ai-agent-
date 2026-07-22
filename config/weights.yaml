@@ -1,0 +1,67 @@
+# MCP Orchestrator — Scoring Configuration
+# All weights, time scores, and adjustments live here.
+# ZERO hardcoded values in the codebase — edit this file to tune behavior.
+
+# Time-of-day base scores for each server
+time_scores:
+  morning:      # 7 AM – 12 PM
+    food: 0.6
+    instamart: 0.8
+    dineout: 0.1
+  lunch:        # 12 PM – 3 PM
+    food: 0.9
+    instamart: 0.4
+    dineout: 0.5
+  afternoon:    # 3 PM – 6 PM
+    food: 0.5
+    instamart: 0.6
+    dineout: 0.2
+  dinner:       # 6 PM – 11 PM
+    food: 0.9
+    instamart: 0.5
+    dineout: 0.8
+  late_night:   # 11 PM – 2 AM
+    food: 0.8
+    instamart: 0.2
+    dineout: 0.1
+  default:      # fallback (2 AM – 7 AM)
+    food: 0.5
+    instamart: 0.5
+    dineout: 0.3
+
+# How much to boost a server when the LLM classifies intent toward it
+intent_boost: 1.2
+
+
+# Location-based score adjustments (additive)
+location_adjustments:
+  office:
+    instamart: -0.3
+    food: 0.1
+    dineout: 0.1
+  gym:
+    instamart: 0.2
+    food: -0.1
+
+# Hunger/urgency-based score adjustments (additive)
+hunger_adjustments:
+  high:
+    food: 0.2
+    dineout: -0.1
+  low:
+    food: -0.1
+    dineout: 0.2
+
+# Weights for each context signal in the scoring pipeline
+signal_weights:
+  time: 1.0          # Time-of-day is the strongest deterministic signal
+  intent: 0.8        # LLM intent classification
+  location: 0.3      # Location context
+  hunger: 0.2        # Urgency signal
+  history: 0.35      # Recency-weighted order history
+  preference_loyalty: 0.15  # Small boost for user's most-used server
+
+# Score clamp range
+score_limits:
+  min: 0.0
+  max: 2.0

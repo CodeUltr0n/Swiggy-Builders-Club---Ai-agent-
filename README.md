@@ -187,13 +187,14 @@ python -m orchestrator
 
 ## Roadmap
 
-- [ ] MCP client connection to Swiggy Food, Instamart, Dineout servers
-- [ ] Context-aware prioritization engine with scoring model
-- [ ] Persistent memory layer (SQLite-backed)
-- [ ] Plugin system for registering new MCP servers
-- [ ] Natural language interface via LLM reasoning
-- [ ] Multi-turn conversation with context carryover
-- [ ] Demo video and usage examples
+- [x] MCP client connection to Swiggy Food, Instamart, Dineout servers
+- [x] Context-aware prioritization engine with scoring model
+- [x] Persistent memory layer (SQLite-backed)
+- [x] Plugin system for registering new MCP servers
+- [x] Natural language interface via LLM reasoning
+- [x] Multi-turn conversation with context carryover
+- [x] OAuth callback server & API endpoint setup
+
 
 ---
 

@@ -27,9 +27,10 @@ htmlcov/
 *.log
 orchestrator.db
 
-# OS & IDE Files
-.DS_Store
-.vscode/
-.idea/
-.gemini/
-*.swp
+# Local Study Guides & Documentation
+VIDEO_DEMO_SCRIPT.md
+CODEBASE_STUDY_GUIDE.md
+CLI_MAIN_ENTRY_POINT_GUIDE.md
+OAUTH_SERVER_GUIDE.md
+
+

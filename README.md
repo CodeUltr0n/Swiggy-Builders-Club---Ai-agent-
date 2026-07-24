@@ -14,7 +14,15 @@
 
 <br>
 
-<!-- Add demo video / screenshot here -->
+<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
+  <img src="https://img.youtube.com/vi/Ph9Zgz69DKQ/maxresdefault.jpg" alt="MCP Orchestrator Demo Video" width="100%">
+</a>
+
+<br><br>
+
+<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
+  <img src="https://img.shields.io/badge/▶%20PLAY%20DEMO-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Play Demo Video">
+</a>
 
 </div>
 
@@ -181,7 +189,19 @@ python -m orchestrator
 
 ---
 
-<!-- Add screenshots / demo walkthrough here -->
+## Demo Walkthrough
+
+<div align="center">
+<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
+  <img src="https://img.youtube.com/vi/Ph9Zgz69DKQ/maxresdefault.jpg" alt="MCP Orchestrator Demo Video" width="100%">
+</a>
+
+<br><br>
+
+<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
+  <img src="https://img.shields.io/badge/▶%20PLAY%20VIDEO-Watch%20on%20YouTube-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Play Video">
+</a>
+</div>
 
 ---
 

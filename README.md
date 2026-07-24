@@ -14,8 +14,8 @@
 
 <br>
 
-<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
-  <img src="https://img.shields.io/badge/▶%20PLAY%20DEMO-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Play Demo Video">
+<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ" target="_blank">
+  <img src="https://i.ytimg.com/vi/Ph9Zgz69DKQ/maxresdefault.jpg" width="600" alt="MCP Orchestrator Demo Video" />
 </a>
 
 </div>

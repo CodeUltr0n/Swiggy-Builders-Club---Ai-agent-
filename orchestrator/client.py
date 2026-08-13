@@ -53,12 +53,22 @@ class SwiggyMCPClient:
         if self.env_mode == "simulation":
             return "mock_token_12345"
 
-        # Check in-memory store
+        # Check in-memory cache
         if server_name in self.access_tokens:
             return self.access_tokens[server_name]
 
-        # In production/staging, run OAuth flow or load from secure storage
-        # For local development, check env vars first
+        # Check SQLite for OAuth token (shared across all servers, stored by oauth.py)
+        stored_token = self.memory.get_preference("swiggy_access_token")
+        stored_expiry = self.memory.get_preference("swiggy_token_expires_at")
+        if stored_token and stored_expiry:
+            import time
+            if time.time() < float(stored_expiry):
+                self.access_tokens[server_name] = stored_token
+                return stored_token
+            else:
+                logger.warning(f"OAuth token in SQLite is expired for '{server_name}'. Re-auth required.")
+
+        # Fallback: check env vars
         env_token = os.environ.get(f"SWIGGY_{server_name.upper()}_TOKEN")
         if env_token:
             self.access_tokens[server_name] = env_token

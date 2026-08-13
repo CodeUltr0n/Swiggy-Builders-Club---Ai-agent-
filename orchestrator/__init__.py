@@ -2,3 +2,4 @@ from orchestrator.client import SwiggyMCPClient
 from orchestrator.prioritizer import ContextPrioritizer
 from orchestrator.router import OrchestratorRouter
 from orchestrator.memory import MemoryManager
+from orchestrator.oauth import SwiggyOAuthClient

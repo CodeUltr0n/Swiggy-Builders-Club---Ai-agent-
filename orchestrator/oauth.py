@@ -362,10 +362,29 @@ class SwiggyOAuthClient:
         }
 
 
-def verify_callback_params(code: Optional[str], state: Optional[str], error: Optional[str]) -> Dict[str, Any]:
-    """Validate OAuth callback parameters."""
+def verify_callback_params(
+    code: Optional[str],
+    state: Optional[str],
+    error: Optional[str],
+    token_store: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Validate OAuth callback parameters.
+
+    If token_store is provided, also validates the state parameter
+    against the stored value (CSRF protection).
+    """
     if error:
         return {"valid": False, "error": f"OAuth error: {error}"}
     if not code:
         return {"valid": False, "error": "Missing authorization code"}
+
+    # CSRF state validation
+    if token_store and hasattr(token_store, "get_preference"):
+        saved_state = token_store.get_preference("oauth_state")
+        if saved_state and state != saved_state:
+            logger.warning(f"OAuth state mismatch! Expected: {saved_state[:10]}..., got: {state[:10] if state else 'None'}...")
+            return {"valid": False, "error": "State mismatch — possible CSRF attack. Please restart the auth flow."}
+
     return {"valid": True, "code": code, "state": state}
+

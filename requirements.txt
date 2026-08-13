@@ -1,10 +1,24 @@
-mcp>=0.1.0
-pyyaml>=6.0
+# Swiggy MCP Orchestrator — Dependencies
+
+# Web framework
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+
+# HTTP client (used by OAuth, MCP client, LLM)
 httpx>=0.24.0
+
+# Config & Environment
+pyyaml>=6.0
 python-dotenv>=1.0.0
+
+# LLM providers
 openai>=1.0.0
+
+# SQLite is stdlib — no package needed
+
+# Testing
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-fastapi>=0.100.0
-uvicorn>=0.20.0
 
+# MCP SDK (if needed for protocol types)
+mcp>=0.1.0

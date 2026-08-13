@@ -1,7 +1,9 @@
 """
 Orchestrator initialization factory.
 
-Wires MemoryManager, LLMClient, ContextPrioritizer, OrchestratorRouter, and Plugin Registrars.
+Wires MemoryManager, LLMClient, ContextPrioritizer, OrchestratorRouter,
+and Plugin Registrars. Supports both simulation mode (SwiggyMCPClient)
+and real MCP mode (MCPClient + OAuth).
 """
 
 import logging
@@ -15,17 +17,27 @@ from orchestrator.memory import MemoryManager
 from orchestrator.llm import LLMClient
 from orchestrator.prioritizer import ContextPrioritizer
 from orchestrator.router import OrchestratorRouter
-from orchestrator.client import SwiggyMCPClient
+from orchestrator.client import SwiggyMCPClient, MCPClient
 
 logger = logging.getLogger(__name__)
 
 
-def create_orchestrator(config_path: str = None) -> OrchestratorRouter:
+def create_orchestrator(
+    config_path: str = None,
+    oauth_client=None,
+) -> OrchestratorRouter:
     """
     Build and return a fully-wired OrchestratorRouter.
 
+    Args:
+        config_path: Path to settings.yaml
+        oauth_client: SwiggyOAuthClient instance. If provided, creates a real
+                      MCPClient for Streamable HTTP calls. If None, falls back
+                      to SwiggyMCPClient (simulation mode).
+
     Reads settings from config/settings.yaml for:
       - LLM provider and model selection
+      - MCP server URLs
       - Database path
     """
     config_path = config_path or str(Path(__file__).parent.parent / "config" / "settings.yaml")
@@ -37,11 +49,26 @@ def create_orchestrator(config_path: str = None) -> OrchestratorRouter:
     llm_config = raw_settings.get("llm", settings.get("llm", {}))
     db_path = settings.get("database_path", raw_settings.get("db_path", "orchestrator.db"))
 
-    # 1. Memory & Client
+    # 1. Memory
     memory = MemoryManager(db_path=db_path)
-    client = SwiggyMCPClient(memory)
 
-    # 2. LLM Client
+    # 2. Simulation Client (always available — CLI and handlers use this)
+    sim_client = SwiggyMCPClient(memory)
+
+    # 3. Real MCP Client (only if OAuth is available)
+    mcp_client = None
+    if oauth_client:
+        mcp_servers = raw_settings.get("mcp_servers", {})
+        mcp_client = MCPClient(
+            oauth_client=oauth_client,
+            server_urls=mcp_servers if mcp_servers else None,
+            memory_manager=memory,
+        )
+        logger.info("Real MCP client created (Streamable HTTP)")
+    else:
+        logger.info("No OAuth client provided — using simulation mode only")
+
+    # 4. LLM Client
     llm = None
     if llm_config.get("enabled", True):
         provider = llm_config.get("provider", "groq")
@@ -50,7 +77,7 @@ def create_orchestrator(config_path: str = None) -> OrchestratorRouter:
         llm = LLMClient(provider=provider, model=model, api_key=api_key)
         logger.info(f"LLM initialized: {llm.provider}/{llm.model}")
 
-    # 3. Prioritizer
+    # 5. Prioritizer
     weights_path = str(Path(__file__).parent.parent / "config" / "weights.yaml")
     prioritizer = ContextPrioritizer(
         memory_manager=memory,
@@ -58,15 +85,18 @@ def create_orchestrator(config_path: str = None) -> OrchestratorRouter:
         llm_client=llm,
     )
 
-    # 4. Router
+    # 6. Router — uses sim_client for handler tool calls (backwards-compatible)
     router = OrchestratorRouter(
-        client=client,
+        client=sim_client,
         prioritizer=prioritizer,
         llm=llm,
     )
 
-    # 5. Register Domain Handlers
-    register_plugins(router, client)
+    # Attach the real MCP client for server.py to use
+    router.mcp_client = mcp_client
+
+    # 7. Register Domain Handlers (correct import paths)
+    register_plugins(router, sim_client)
 
     return router
 

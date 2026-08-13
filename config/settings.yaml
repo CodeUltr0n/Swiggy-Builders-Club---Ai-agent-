@@ -25,5 +25,10 @@ llm:
   fallback_provider: gemini    # Secondary provider for automatic failover on rate limits / errors
   # api_key is read automatically from GROQ_API_KEY, GEMINI_API_KEY, or XAI_API_KEY in .env
 
-db_path: orchestrator.db
+# MCP Server URLs (Swiggy gateway)
+mcp_servers:
+  food: "https://mcp.swiggy.com/servers/food"
+  instamart: "https://mcp.swiggy.com/servers/instamart"
+  dineout: "https://mcp.swiggy.com/servers/dineout"
 
+db_path: orchestrator.db

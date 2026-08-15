@@ -7,7 +7,7 @@ settings:
   
   # LLM settings
   llm_provider: "groq"
-  llm_model: "llama-3.3-70b-versatile"
+  llm_model: "qwen-3.6-27b"
   
   # Default fallback context parameters
   default_context:
@@ -21,7 +21,7 @@ settings:
 llm:
   enabled: true
   provider: groq               # Primary LLM provider: "groq", "gemini", or "xai"
-  model: llama-3.3-70b-versatile  # Groq: llama-3.3-70b-versatile | Gemini: gemini-2.5-flash | xAI: grok-3-mini
+  model: qwen-3.6-27b          # Groq: qwen-3.6-27b / gpt-oss-120b | Gemini: gemini-2.5-flash | xAI: grok-3-mini
   fallback_provider: gemini    # Secondary provider for automatic failover on rate limits / errors
   # api_key is read automatically from GROQ_API_KEY, GEMINI_API_KEY, or XAI_API_KEY in .env
 

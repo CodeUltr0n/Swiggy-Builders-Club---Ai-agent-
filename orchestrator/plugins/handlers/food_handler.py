@@ -170,7 +170,7 @@ def create_handler(client, router):
 
         # ---- Scenario 1: Track order ----
         if any(w in query_lower for w in ["track", "status", "where is"]):
-            return await _track_order(client, router, tool_logs)
+            return await _track_order(client, router, address, tool_logs)
 
         # ---- Scenario 2: Add to cart / Place order ----
         if any(w in query_lower for w in ["add", "cart", "order", "place", "buy"]):
@@ -182,9 +182,9 @@ def create_handler(client, router):
     return handle
 
 
-async def _track_order(client, router, tool_logs):
-    orders_res = await client.call_tool("food", "get_food_orders", {})
-    tool_logs.append({"tool": "get_food_orders", "args": {}, "result": orders_res})
+async def _track_order(client, router, address, tool_logs):
+    orders_res = await client.call_tool("food", "get_food_orders", {"addressId": address.get("id", "")})
+    tool_logs.append({"tool": "get_food_orders", "args": {"addressId": address.get("id", "")}, "result": orders_res})
 
     if orders_res.get("success") and orders_res.get("data"):
         latest = orders_res["data"][0]
@@ -624,12 +624,20 @@ async def _add_to_cart(client, router, query, address, tool_logs):
             "state": router.current_state,
         }
 
-    coupon_res = await client.call_tool("food", "apply_food_coupon", {"code": "WELCOME50"})
-    tool_logs.append({"tool": "apply_food_coupon", "args": {"code": "WELCOME50"}, "result": coupon_res})
+    coupon_res = await client.call_tool("food", "apply_food_coupon", {
+        "couponCode": "WELCOME50",
+        "addressId": address["id"],
+    })
+    tool_logs.append({
+        "tool": "apply_food_coupon",
+        "args": {"couponCode": "WELCOME50", "addressId": address["id"]},
+        "result": coupon_res,
+    })
 
     final_total = cart_data.get("grand_total", subtotal)
-    if coupon_res.get("success") and coupon_res.get("data", {}).get("final_amount"):
-        final_total = coupon_res["data"]["final_amount"]
+    if coupon_res.get("success") and isinstance(coupon_res.get("data"), dict):
+        if coupon_res["data"].get("final_amount"):
+            final_total = coupon_res["data"]["final_amount"]
 
     router.current_state["stage"] = "awaiting_order_confirm"
     router.current_state["pending_action"] = {

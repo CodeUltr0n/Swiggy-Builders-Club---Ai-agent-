@@ -69,12 +69,14 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
 
     deals_info = []
     if restaurants:
-        first = restaurants[0]
-        router.current_state["active_restaurant_id"] = first["id"]
-        router.current_state["active_restaurant_name"] = first["name"]
-
-        details_res = await client.call_tool("dineout", "get_restaurant_details", {"restaurantId": first["id"]})
-        tool_logs.append({"tool": "get_restaurant_details", "args": {"restaurantId": first["id"]}, "result": details_res})
+        lat = context.get("resolved_address", {}).get("latitude", 12.9784) or 12.9784
+        lng = context.get("resolved_address", {}).get("longitude", 77.6408) or 77.6408
+        details_res = await client.call_tool("dineout", "get_restaurant_details", {
+            "restaurantId": first["id"],
+            "latitude": lat,
+            "longitude": lng,
+        })
+        tool_logs.append({"tool": "get_restaurant_details", "args": {"restaurantId": first["id"], "latitude": lat, "longitude": lng}, "result": details_res})
         d_data = details_res.get("data") if (details_res.get("success") and isinstance(details_res.get("data"), dict)) else {}
         deals_info = d_data.get("deals", [])
 
@@ -189,8 +191,14 @@ async def _book_table(client, router, query, context, tool_logs):
                 "state": router.current_state,
             }
 
-    details_res = await client.call_tool("dineout", "get_restaurant_details", {"restaurantId": rest_id})
-    tool_logs.append({"tool": "get_restaurant_details", "args": {"restaurantId": rest_id}, "result": details_res})
+    lat = context.get("resolved_address", {}).get("latitude", 12.9784) or 12.9784
+    lng = context.get("resolved_address", {}).get("longitude", 77.6408) or 77.6408
+    details_res = await client.call_tool("dineout", "get_restaurant_details", {
+        "restaurantId": rest_id,
+        "latitude": lat,
+        "longitude": lng,
+    })
+    tool_logs.append({"tool": "get_restaurant_details", "args": {"restaurantId": rest_id, "latitude": lat, "longitude": lng}, "result": details_res})
 
     d_data = details_res.get("data") if (details_res.get("success") and isinstance(details_res.get("data"), dict)) else {}
     deals = d_data.get("deals", [])
@@ -202,16 +210,12 @@ async def _book_table(client, router, query, context, tool_logs):
 
     cart_res = await client.call_tool("dineout", "create_cart", {
         "restaurantId": rest_id,
-        "dealId": deal_id,
-        "guests": guests,
-        "slotTime": slot_time,
-        "slotDate": slot_date,
-        "billToPay": 0.0,
-        "skipPayment": True,
+        "cartType": "PREBOOK",
+        "latitude": lat,
+        "longitude": lng,
     })
     tool_logs.append({"tool": "create_cart", "args": {
-        "restaurantId": rest_id, "dealId": deal_id, "guests": guests,
-        "slotTime": slot_time, "slotDate": slot_date, "billToPay": 0.0, "skipPayment": True,
+        "restaurantId": rest_id, "cartType": "PREBOOK", "latitude": lat, "longitude": lng,
     }, "result": cart_res})
 
     if not cart_res.get("success"):
@@ -262,8 +266,8 @@ async def _booking_status(client, router, tool_logs):
         }
 
     latest = dineout_orders[0]
-    status_res = await client.call_tool("dineout", "get_booking_status", {"bookingId": latest["id"]})
-    tool_logs.append({"tool": "get_booking_status", "args": {"bookingId": latest["id"]}, "result": status_res})
+    status_res = await client.call_tool("dineout", "get_booking_status", {"orderId": latest["id"]})
+    tool_logs.append({"tool": "get_booking_status", "args": {"orderId": latest["id"]}, "result": status_res})
 
     if status_res.get("success"):
         d = status_res["data"]

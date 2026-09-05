@@ -31,6 +31,24 @@ export default function App() {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  const [activeLocation, setActiveLocation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('swiggy_active_location');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleLocationChange = (newLoc) => {
+    setActiveLocation(newLoc);
+    try {
+      localStorage.setItem('swiggy_active_location', JSON.stringify(newLoc));
+    } catch (e) {
+      console.warn('Storage error:', e);
+    }
+  };
+
   const handleSend = async (actionQuery) => {
     const textToSend = (typeof actionQuery === 'string' ? actionQuery : inputValue).trim();
     if (!textToSend) return;
@@ -41,10 +59,21 @@ export default function App() {
     setIsLoading(true);
 
     try {
+      const context = {};
+      if (activeLocation) {
+        if (activeLocation.latitude) context.latitude = activeLocation.latitude;
+        if (activeLocation.longitude) context.longitude = activeLocation.longitude;
+        if (activeLocation.city) context.city = activeLocation.city;
+        if (activeLocation.locality) context.locality = activeLocation.locality;
+        if (activeLocation.addressLine) context.addressLine = activeLocation.addressLine;
+        if (activeLocation.addressId) context.address_id = activeLocation.addressId;
+        if (activeLocation.isLiveGps) context.is_live_gps = true;
+      }
+
       const response = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: textToSend })
+        body: JSON.stringify({ query: textToSend, context })
       });
       
       if (!response.ok) {
@@ -123,7 +152,7 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <StatusPanel />
+      <StatusPanel activeLocation={activeLocation} onLocationChange={handleLocationChange} />
       
       <main className="main-content">
         <div className="chat-container">

@@ -269,10 +269,13 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
 
     raw_text = rest_res.get("raw_text") or (rest_res.get("data") if isinstance(rest_res.get("data"), str) else "")
 
-    # If specific query returned 0 restaurants, fetch open restaurants with broad queries
+    original_matched = bool(restaurants)
+    fallback_used = False
+
+    # If specific query returned 0 restaurants, fetch open restaurants with broad food queries
     if not restaurants:
-        for fallback_q in ["sweets", "food", "restaurant"]:
-            if fallback_q == search_query:
+        for fallback_q in ["food", "restaurant"]:
+            if fallback_q == search_query.lower():
                 continue
             all_open_res = await client.call_tool("food", "search_restaurants", {
                 "addressId": address["id"], "query": fallback_q
@@ -287,6 +290,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 if not raw_text:
                     raw_text = all_open_res.get("raw_text") or (all_open_res.get("data") if isinstance(all_open_res.get("data"), str) else "")
                 if restaurants:
+                    fallback_used = True
                     break
 
     # If search calls failed entirely (e.g. auth/MCP error), tell the user why
@@ -387,11 +391,14 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 "search_query": search_query,
                 "open_restaurants": restaurant_options,
                 "swiggy_raw_response": raw_text,
+                "search_matched": original_matched,
             },
             system_instruction=(
                 "You are the Swiggy MCP Food Orchestrator. "
                 "The user is asking for food/sweets/meals. "
                 "Analyze their request based on their location, time of day/demand, and the retrieved open restaurants and menus. "
+                "CRITICAL: If the user specifically asked for a dish/cuisine (e.g. 'biryani') and no restaurants were found matching that dish (search_matched is False), "
+                "you MUST clearly and politely state that no restaurants are currently delivering that specific item to their location right now before presenting the other available open restaurants as alternatives. "
                 "Format cleanly using GitHub Markdown with bold restaurant names and prices."
             )
         )
@@ -406,9 +413,13 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
 
     # Standard fallback formatting if LLM is disabled
     text = f"**Food Server** (Priority Score: {rankings[0][1]}):\n\n"
-    loc_label = address.get('label') or address.get('address_line') or address.get('city') or 'your location'
+    loc_label = address.get('label') or address.get('addressLine') or address.get('city') or 'your location'
     if restaurant_options:
-        text += f"Open restaurants near **{loc_label}**:\n\n"
+        if not original_matched and fallback_used:
+            text += f"⚠️ *No restaurants are currently delivering **{search_query}** to **{loc_label}** right now.*\n\n"
+            text += f"Here are other top open restaurants currently delivering near you:\n\n"
+        else:
+            text += f"Open restaurants near **{loc_label}**:\n\n"
         for i, r in enumerate(restaurant_options):
             meta_parts = []
             if r.get('cuisine'):

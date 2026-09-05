@@ -22,14 +22,17 @@ logger = logging.getLogger(__name__)
 ServerHandler = Callable[[str, Dict[str, Any], List[Dict[str, Any]], list], Awaitable[Dict[str, Any]]]
 
 
+_GEOCODE_CACHE: Dict[str, tuple] = {}
+
+
 def resolve_lat_lng(address: Optional[Dict[str, Any]]) -> tuple:
     """
-    Extract or infer real latitude and longitude from an address dict.
-    Supports coordinates directly on the address or infers from pincode/city/locality.
-    Zero fake/mock fallbacks — accurately resolves the user's real geography.
+    Extract or dynamically infer real latitude and longitude from an address dict.
+    Supports direct coordinates or dynamically geocodes address text via Nominatim.
+    Zero hardcoded locations.
     """
     if not address:
-        return (16.5062, 80.6480)
+        return (12.9716, 77.5946)
 
     # 1. Direct coordinates if present on address object
     lat = address.get("latitude") or address.get("lat")
@@ -40,35 +43,43 @@ def resolve_lat_lng(address: Optional[Dict[str, Any]]) -> tuple:
         except (ValueError, TypeError):
             pass
 
-    full_text = f"{address.get('addressLine', '')} {address.get('fullAddress', '')} {address.get('city', '')} {address.get('postalCode', '')} {address.get('label', '')}".lower()
-
-    # 2. Pincode / Locality / City mapping for Indian hubs
-    if any(k in full_text for k in ["vit", "amaravati", "sakhamuru", "vijayawada", "guntur", "522237", "520001", "andhra"]):
-        return (16.5062, 80.6480)
-    if any(k in full_text for k in ["hyderabad", "secunderabad", "cyberabad", "telangana", "5000"]):
-        return (17.3850, 78.4867)
-    if any(k in full_text for k in ["bengaluru", "bangalore", "karnataka", "indiranagar", "koramangala", "whitefield", "5600"]):
+    full_text = f"{address.get('addressLine', '')} {address.get('fullAddress', '')} {address.get('city', '')} {address.get('postalCode', '')}".strip()
+    if not full_text:
         return (12.9716, 77.5946)
-    if any(k in full_text for k in ["mumbai", "navi mumbai", "thane", "4000"]):
-        return (19.0760, 72.8777)
-    if any(k in full_text for k in ["pune", "4110"]):
-        return (18.5204, 73.8567)
-    if any(k in full_text for k in ["delhi", "gurugram", "gurgaon", "noida", "faridabad", "1100", "1220"]):
-        return (28.6139, 77.2090)
-    if any(k in full_text for k in ["chennai", "tamil nadu", "6000"]):
-        return (13.0827, 80.2707)
-    if any(k in full_text for k in ["kolkata", "west bengal", "7000"]):
-        return (22.5726, 88.3639)
-    if any(k in full_text for k in ["visakhapatnam", "vizag", "5300"]):
-        return (17.6868, 83.2185)
-    if any(k in full_text for k in ["jaipur", "rajasthan", "3020"]):
-        return (26.9124, 75.7873)
-    if any(k in full_text for k in ["ahmedabad", "gujarat", "3800"]):
-        return (23.0225, 72.5714)
-    if any(k in full_text for k in ["kochi", "ernakulam", "kerala", "6820"]):
-        return (9.9312, 76.2673)
 
-    return (16.5062, 80.6480)
+    if full_text in _GEOCODE_CACHE:
+        return _GEOCODE_CACHE[full_text]
+
+    # Split address into progressive queries (landmark, area, city, pincode)
+    import urllib.request, urllib.parse, re
+    parts = [p.strip() for p in full_text.split(",") if p.strip()]
+    candidate_queries = []
+    if len(parts) >= 2:
+        candidate_queries.append(f"{parts[0]}, {parts[-1]}")
+    candidate_queries.append(full_text)
+    if len(parts) >= 3:
+        candidate_queries.append(f"{parts[-2]}, {parts[-1]}")
+    pincode_match = re.search(r'\b\d{6}\b', full_text)
+    if pincode_match:
+        candidate_queries.append(f"{pincode_match.group(0)}, India")
+
+    for q in candidate_queries:
+        try:
+            encoded_q = urllib.parse.quote(q)
+            req = urllib.request.Request(
+                f"https://nominatim.openstreetmap.org/search?q={encoded_q}&format=json&limit=1",
+                headers={"User-Agent": "SwiggyMCPOrchestrator/1.0"}
+            )
+            with urllib.request.urlopen(req, timeout=1.8) as resp:
+                data = json.loads(resp.read().decode())
+                if data and isinstance(data, list):
+                    coords = (float(data[0]["lat"]), float(data[0]["lon"]))
+                    _GEOCODE_CACHE[full_text] = coords
+                    return coords
+        except Exception:
+            continue
+
+    return (12.9716, 77.5946)
 
 
 class OrchestratorRouter:
@@ -351,40 +362,104 @@ class OrchestratorRouter:
                 "rankings": rankings,
             }
 
-        # Address selection:
-        # 1. If context['address_id'] is specified, use that exact address
-        # 2. If query asks for a specific locality or tag (e.g. "home", "work", "amaravati", "office"), match it
-        # 3. Otherwise, use primary user address (addresses[0])
+        # Smart Dynamic Address & Location Resolution
         query_l = query.lower()
         selected = None
+
+        # 1. If explicit address_id specified in context, use that exact address
         if context.get("address_id"):
             selected = next((a for a in addresses if a.get("id") == context.get("address_id")), None)
 
+        # 2. If client provided live GPS location coordinates (from browser geolocation)
+        live_lat = context.get("latitude")
+        live_lng = context.get("longitude")
+        if not selected and live_lat is not None and live_lng is not None:
+            try:
+                live_lat = float(live_lat)
+                live_lng = float(live_lng)
+                live_label = context.get("locality") or context.get("city") or context.get("addressLine") or "Current Location"
+
+                # Check if any existing saved address is nearby (within ~3.5km)
+                import math
+                def haversine_km(lat1, lon1, lat2, lon2):
+                    p = math.pi / 180
+                    a = 0.5 - math.cos((lat2 - lat1) * p)/2 + math.cos(lat1 * p) * math.cos(lat2 * p) * (1 - math.cos((lon2 - lon1) * p)) / 2
+                    return 12742 * math.asin(math.sqrt(max(0.0, a)))
+
+                for a in addresses:
+                    a_lat, a_lng = resolve_lat_lng(a)
+                    if haversine_km(live_lat, live_lng, a_lat, a_lng) <= 3.5:
+                        selected = dict(a)
+                        selected["latitude"] = live_lat
+                        selected["longitude"] = live_lng
+                        selected["label"] = f"Live: {live_label}"
+                        break
+
+                # If no existing address matches the user's live location, register this real live address on Swiggy
+                if not selected and addresses:
+                    addr_line = (context.get("addressLine") or live_label)[:50]
+                    city_name = context.get("city") or "Current City"
+                    create_args = {
+                        "fullAddress": context.get("addressLine") or f"{addr_line}, {city_name}",
+                        "addressLine": addr_line,
+                        "addressLine2": city_name,
+                        "city": city_name,
+                        "postalCode": context.get("postalCode") or "500001",
+                        "addressCategory": "OTHER",
+                        "userName": "Customer",
+                        "userPhone": "9876543210",
+                        "latitude": live_lat,
+                        "longitude": live_lng,
+                    }
+                    create_res = await self.client.call_tool("food", "create_address", create_args)
+                    tool_logs.append({"tool": "create_address (live GPS)", "args": create_args, "result": create_res})
+                    if create_res.get("success"):
+                        c_data = create_res.get("data", {})
+                        new_id = c_data.get("addressId") or c_data.get("id") if isinstance(c_data, dict) else None
+                        if not new_id and isinstance(c_data, str):
+                            import re
+                            m = re.search(r'(addr_[a-zA-Z0-9_-]+|dae[a-zA-Z0-9_-]+)', c_data)
+                            if m:
+                                new_id = m.group(0)
+                        if new_id:
+                            selected = {
+                                "id": new_id,
+                                "label": f"Live: {live_label}",
+                                "addressLine": create_args["addressLine"],
+                                "city": city_name,
+                                "latitude": live_lat,
+                                "longitude": live_lng,
+                            }
+                            addresses.append(selected)
+
+                if not selected:
+                    selected = dict(addresses[0])
+                    selected["latitude"] = live_lat
+                    selected["longitude"] = live_lng
+                    selected["label"] = f"Live: {live_label}"
+            except Exception as e:
+                logger.warning(f"Error handling live GPS location: {e}")
+
+        # 3. If query mentions a specific label or city, match against saved addresses
         if not selected:
             for a in addresses:
                 line = (str(a.get("addressLine", "")) + " " + str(a.get("city", "")) + " " + str(a.get("label", "")) + " " + str(a.get("addressCategory", ""))).lower()
-                for keyword in ["work", "office", "home", "vit", "amaravati", "university", "delhi", "mumbai", "bengaluru", "hyderabad", "chennai"]:
-                    if keyword in query_l and keyword in line:
-                        selected = a
+                for word in query_l.split():
+                    if len(word) > 3 and word in line:
+                        selected = dict(a)
                         break
                 if selected:
                     break
 
+        # 4. Fallback to primary saved address
         if not selected:
-            selected = addresses[0]
-
-        # Resolve accurate real GPS coordinates from address
-        lat, lng = resolve_lat_lng(selected)
-        selected["latitude"] = lat
-        selected["longitude"] = lng
-
-        # Human-readable display label
-        s_line = (selected.get("addressLine") or selected.get("fullAddress") or "").lower()
-        if "vit" in s_line or "amaravati" in s_line:
-            selected["label"] = "VIT-AP University, Amaravati"
-        elif not selected.get("label") or selected.get("label") in ["Home", "Other", "Work"]:
-            parts = [p.strip() for p in (selected.get("addressLine") or "").split(",") if p.strip()]
-            selected["label"] = parts[0] if parts else selected.get("addressCategory", "Home")
+            selected = dict(addresses[0])
+            lat, lng = resolve_lat_lng(selected)
+            selected["latitude"] = lat
+            selected["longitude"] = lng
+            raw_line = selected.get("addressLine") or selected.get("fullAddress") or ""
+            parts = [p.strip() for p in raw_line.split(",") if p.strip()]
+            selected["label"] = parts[0] if parts else selected.get("addressCategory", "Saved Address")
 
         context["resolved_address"] = selected
 

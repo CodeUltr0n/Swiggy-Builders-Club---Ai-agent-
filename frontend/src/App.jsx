@@ -8,24 +8,23 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef(null);
+  const messagesListRef = useRef(null);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch('/auth/status');
-        const data = await res.json();
-        setIsAuthenticated(data.authenticated === true);
-      } catch (e) {
-        console.error("Auth check failed", e);
-        setIsAuthenticated(false);
-      }
-    };
-    checkAuth();
+    // Check real auth status on load
+    fetch('/auth/status')
+      .then(res => res.json())
+      .then(data => setIsAuthenticated(data.authenticated))
+      .catch(() => setIsAuthenticated(false));
   }, []);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesListRef.current) {
+      messagesListRef.current.scrollTo({
+        top: messagesListRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   };
 
   useEffect(() => {
@@ -41,37 +40,31 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/chat', {
+      const response = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: userMsg.content,
-          context: {
-            resolved_address: { id: "home", label: "Home", latitude: 12.9716, longitude: 77.5946 }
-          }
-        })
+        body: JSON.stringify({ query: inputValue })
       });
-
-      if (res.status === 401) {
-        setIsAuthenticated(false);
-        setIsLoading(false);
-        return;
+      
+      if (!response.ok) {
+        throw new Error('Failed to send message');
       }
-
-      const data = await res.json();
+      
+      const data = await response.json();
       
       const agentMsg = {
         role: 'agent',
-        content: data.response,
+        content: data.response || 'No response from Swiggy.',
         active_server: data.active_server,
-        rankings: data.rankings,
-        tool_calls: data.tool_calls
+        rankings: data.rankings || [],
+        tool_calls: data.tool_calls || []
       };
       
       setMessages(prev => [...prev, agentMsg]);
-    } catch (e) {
-      console.error(e);
-      setMessages(prev => [...prev, { role: 'agent', content: "Connection to Control Plane failed." }]);
+    } catch (error) {
+      console.error(error);
+      const errorMsg = { role: 'agent', content: 'Sorry, there was an error processing your request.' };
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +121,7 @@ export default function App() {
       
       <main className="main-content">
         <div className="chat-container">
-          <div className="messages-list">
+          <div className="messages-list" ref={messagesListRef}>
             {messages.length === 0 && (
               <div style={{ textAlign: 'center', marginTop: '100px', color: 'var(--text-secondary)' }}>
                 <Terminal size={48} style={{ margin: '0 auto 20px', opacity: 0.5 }} />
@@ -150,34 +143,35 @@ export default function App() {
                 <span className="typing-text">Processing request...</span>
               </div>
             )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <div className="input-container">
-            <div className="input-box">
-              <input
-                type="text"
-                className="chat-input"
-                placeholder="Enter request (e.g., 'Find me something spicy under ₹300')..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-              />
-              <button 
-                className="send-button" 
-                onClick={handleSend} 
-                disabled={!inputValue.trim() || isLoading}
-              >
-                <Send size={16} />
-              </button>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-              Powered by <span style={{ fontWeight: 'bold', color: '#fff' }}>Swiggy MCP</span>
-            </div>
           </div>
         </div>
       </main>
+
+      <div className="input-container">
+        <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+          <div className="input-box">
+            <input
+              type="text"
+              className="chat-input"
+              placeholder="Enter request (e.g., 'Find me something spicy under ₹300')..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+            />
+            <button 
+              className="send-button" 
+              onClick={handleSend} 
+              disabled={!inputValue.trim() || isLoading}
+            >
+              <Send size={16} />
+            </button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            Powered by <span style={{ fontWeight: 'bold', color: 'var(--orange-primary)' }}>Swiggy MCP</span> &bull; Developed by <span style={{ fontWeight: 'bold' }}>Ketan Chokkara</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

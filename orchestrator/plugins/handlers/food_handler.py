@@ -122,6 +122,21 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
         if all_open_res.get("success"):
             restaurants = all_open_res["data"].get("restaurants", [])
 
+    # If search calls failed entirely (e.g. auth/MCP error), tell the user why
+    if not restaurants and not rest_res.get("success"):
+        error_msg = rest_res.get("error", "Unknown error connecting to Swiggy servers")
+        return {
+            "response_text": (
+                f"⚠️ **Could not fetch restaurants from Swiggy.**\n\n"
+                f"Error: `{error_msg}`\n\n"
+                f"This usually means the OAuth session needs to be refreshed. "
+                f"Please try [re-authenticating](/auth/start)."
+            ),
+            "tool_calls": tool_logs,
+            "active_server": "food",
+            "state": router.current_state,
+        }
+
     # Fetch menu items for top open restaurants to provide rich LLM context
     restaurant_options = []
     for r in restaurants[:3]:

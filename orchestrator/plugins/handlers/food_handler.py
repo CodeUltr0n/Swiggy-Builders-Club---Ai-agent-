@@ -214,6 +214,77 @@ async def _track_order(client, router, address, tool_logs):
     }
 
 
+def _extract_dishes_from_menu(menu_data: Any, r_id: str, r_name: str) -> list:
+    """Recursively extract all real food dishes from Swiggy menu categories and subcategories."""
+    dishes = []
+    seen_ids = set()
+
+    def _process_item(item: dict):
+        if not isinstance(item, dict):
+            return
+        name = item.get("name") or item.get("itemName")
+        if not name:
+            return
+        i_id = str(item.get("id") or item.get("itemId") or f"{r_id}_{len(dishes)+1}")
+        if i_id in seen_ids:
+            return
+        seen_ids.add(i_id)
+
+        raw_price = item.get("price") or item.get("defaultPrice") or item.get("finalPrice") or 0
+        try:
+            price = float(raw_price)
+            if price > 1000:
+                price = price / 100.0
+        except (ValueError, TypeError):
+            price = 0.0
+
+        is_veg = item.get("isVeg")
+        if is_veg is None:
+            is_veg = item.get("itemAttribute", {}).get("vegClassifier") == "VEG" if isinstance(item.get("itemAttribute"), dict) else False
+
+        img = item.get("imageUrl") or item.get("image") or ""
+        if img and not img.startswith("http"):
+            img = f"https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_300,h_300,c_fit/{img}"
+
+        rating_val = "4.2"
+        if item.get("rating"):
+            rating_val = str(item.get("rating"))
+        elif isinstance(item.get("ratings"), dict):
+            rating_val = str(item.get("ratings", {}).get("aggregatedRating", {}).get("rating", "4.2"))
+
+        dishes.append({
+            "id": i_id,
+            "restaurantId": r_id,
+            "restaurantName": r_name,
+            "name": name,
+            "price": round(price, 2),
+            "isVeg": bool(is_veg),
+            "rating": rating_val,
+            "imageUrl": img,
+            "description": item.get("description", ""),
+            "isBestseller": bool(item.get("isBestseller", False)),
+            "inStock": item.get("inStock", 1)
+        })
+
+    def _walk(obj):
+        if isinstance(obj, dict):
+            if "items" in obj and isinstance(obj["items"], list):
+                for it in obj["items"]:
+                    _process_item(it)
+            if "dishes" in obj and isinstance(obj["dishes"], list):
+                for it in obj["dishes"]:
+                    _process_item(it)
+            for k, v in obj.items():
+                if k not in ("items", "dishes"):
+                    _walk(v)
+        elif isinstance(obj, list):
+            for elem in obj:
+                _walk(elem)
+
+    _walk(menu_data)
+    return dishes
+
+
 async def _search_restaurants(client, router, query, address, tool_logs, rankings):
     """
     Search restaurants and synthesize a dynamic response via LLM reasoning
@@ -294,8 +365,8 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                     break
 
     # If search calls failed entirely (e.g. auth/MCP error), tell the user why
-    if not restaurants and not rest_res.get("success") and not raw_text:
-        error_msg = rest_res.get("error", "Unknown error connecting to Swiggy servers")
+    if not restaurants and not raw_text:
+        error_msg = rest_res.get("error", "No restaurants found.")
         return {
             "response_text": (
                 f"⚠️ **Could not fetch restaurants from Swiggy.**\n\n"
@@ -308,13 +379,36 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             "state": router.current_state,
         }
 
-    # Fetch menu items for top open restaurants to provide rich LLM context
+    # Fetch menu items for top open restaurants to provide rich LLM context and dish cards
     restaurant_options = []
+    all_extracted_dishes = []
+
+    # Also check if search_restaurants itself returned dishes directly
+    if rest_res.get("data") and isinstance(rest_res["data"], dict):
+        direct_dishes = rest_res["data"].get("dishes", [])
+        if direct_dishes:
+            for dd in direct_dishes:
+                if isinstance(dd, dict):
+                    all_extracted_dishes.append({
+                        "id": str(dd.get("id", "")),
+                        "restaurantId": str(dd.get("restaurantId", "")),
+                        "restaurantName": dd.get("restaurantName", ""),
+                        "name": dd.get("name", "Dish"),
+                        "price": float(dd.get("price", 0) if dd.get("price") else 0),
+                        "isVeg": bool(dd.get("isVeg", False)),
+                        "rating": str(dd.get("rating", "4.2")),
+                        "imageUrl": dd.get("imageUrl", ""),
+                        "description": dd.get("description", ""),
+                        "isBestseller": bool(dd.get("isBestseller", False)),
+                        "inStock": dd.get("inStock", 1)
+                    })
+
     for r in restaurants[:3]:
         if not isinstance(r, dict):
             logger.warning(f"Skipping non-dict restaurant entry: {type(r).__name__}")
             continue
         r_id = r.get("id")
+        r_name = r.get("name", "Unknown Restaurant")
         if not r_id:
             continue
 
@@ -328,47 +422,38 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             "result": menu_res,
         })
 
-        # Extract menu items — handle Swiggy MCP categories format & direct items
+        # Recursively extract all genuine dishes
         menu_data = menu_res.get("data", {}) if (menu_res.get("success") and isinstance(menu_res.get("data"), dict)) else {}
-        items = []
-        if isinstance(menu_data, dict):
-            categories = menu_data.get("categories", [])
-            if isinstance(categories, list):
-                for cat in categories:
-                    if isinstance(cat, dict):
-                        cat_items = cat.get("items", [])
-                        if isinstance(cat_items, list):
-                            items.extend(cat_items)
-            if not items:
-                direct_items = menu_data.get("items", menu_data.get("menu", []))
-                if isinstance(direct_items, list):
-                    items = direct_items
-                elif isinstance(direct_items, dict):
-                    items = direct_items.get("items", direct_items.get("categories", []))
-        elif isinstance(menu_data, list):
-            items = menu_data
-
-        if not isinstance(items, list):
-            items = []
+        dishes = _extract_dishes_from_menu(menu_data, r_id, r_name)
+        all_extracted_dishes.extend(dishes)
 
         # Build menu highlights safely with Indian Rupee symbol
         menu_highlights = []
-        for it in items[:6]:
-            if isinstance(it, dict):
-                item_name = it.get("name", it.get("itemName", "Item"))
-                item_price = it.get("price", it.get("defaultPrice", it.get("finalPrice", "?")))
-                if isinstance(item_price, (int, float)) and item_price > 1000:
-                    item_price = item_price / 100
-                menu_highlights.append(f"{item_name} (₹{item_price})")
+        for it in dishes[:6]:
+            menu_highlights.append(f"{it['name']} (₹{it['price']})")
 
         restaurant_options.append({
             "id": r_id,
-            "name": r.get("name", "Unknown Restaurant"),
+            "name": r_name,
             "cuisine": r.get("cuisine", ", ".join(r.get("cuisines", [])) if isinstance(r.get("cuisines"), list) else ""),
             "rating": r.get("rating", r.get("avgRating", "N/A")),
             "distance_km": r.get("distance_km", r.get("distanceKm", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0)),
             "menu_highlights": menu_highlights,
-            "menu_items": items,
+            "dishes": dishes,
+        })
+
+    # Add dedicated dish tool call for frontend dish carousel rendering
+    if all_extracted_dishes:
+        tool_logs.append({
+            "tool": "restaurant_menu_dishes",
+            "args": {"query": search_query},
+            "result": {
+                "success": True,
+                "data": {
+                    "dishes": all_extracted_dishes[:30],
+                    "total": len(all_extracted_dishes)
+                }
+            }
         })
 
     if restaurant_options:
@@ -436,11 +521,11 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                     text += f"   • {item_str}\n"
             text += "\n"
     elif raw_text and ("total\":0" in raw_text or "totalRestaurants\":0" in raw_text or "restaurants\":[]" in raw_text):
-        text += f"No open restaurants are currently delivering **{search_query}** to **{loc_label}** right now.\n\nPlease check back during restaurant operating hours or choose another delivery location."
+        text += f"🌙 **All restaurants delivering to {loc_label} are currently closed for the night.**\n\nNo open restaurants are currently delivering **{search_query}** to this location.\n\nPlease check back during daytime operating hours or switch to another saved delivery address (e.g. Hyderabad or Bengaluru) in the top location selector."
     elif raw_text and len(raw_text.strip()) > 10 and not raw_text.strip().startswith("{"):
         text += f"{raw_text}\n"
     else:
-        text += f"No open restaurants found matching '{search_query or 'your request'}' near **{loc_label}** right now.\n"
+        text += f"🌙 **All restaurants near {loc_label} are currently closed.**\n\nNo open restaurants found matching '{search_query or 'your request'}'. You can switch to another saved delivery address in the location menu above to order food right now.\n"
 
     return {
         "response_text": text,

@@ -4,17 +4,25 @@ import ItemDetailModal from './ItemDetailModal';
 import ReactMarkdown from 'react-markdown';
 import { Bot, User, Plus, ShoppingBag, Utensils, Calendar, Info, Check, X } from 'lucide-react';
 
-export default function Message({ msg, isLatestAgentMsg, onAction }) {
+export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }) {
   const isAgent = msg.role === 'agent';
   const [activeModalItem, setActiveModalItem] = useState(null);
   const [modalType, setModalType] = useState('food');
 
-  // Extract restaurants and products from tool calls to render rich cards if available
+  // Extract restaurants, dishes, and products from tool calls to render rich cards if available
   let restaurants = [];
+  let dishes = [];
   let products = [];
   let isDineoutServer = msg.active_server === 'dineout';
 
   if (isAgent && msg.tool_calls) {
+    // 1. Extract Dishes
+    const dishTool = msg.tool_calls.find(t => t.tool === 'restaurant_menu_dishes');
+    if (dishTool && dishTool.result?.data?.dishes) {
+      dishes = dishTool.result.data.dishes;
+    }
+
+    // 2. Extract Restaurants
     const searchRes = msg.tool_calls.find(t => t.tool === 'search_restaurants' || t.tool === 'search_restaurants_dineout');
     if (searchRes && searchRes.result) {
       if (searchRes.tool === 'search_restaurants_dineout') {
@@ -26,11 +34,18 @@ export default function Message({ msg, isLatestAgentMsg, onAction }) {
         restaurants = d;
       } else if (d && Array.isArray(d.restaurants)) {
         restaurants = d.restaurants;
+        if (!dishes.length && Array.isArray(d.dishes)) {
+          dishes = d.dishes;
+        }
       } else if (s && Array.isArray(s.restaurants)) {
         restaurants = s.restaurants;
+        if (!dishes.length && Array.isArray(s.dishes)) {
+          dishes = s.dishes;
+        }
       }
     }
 
+    // 3. Extract Instamart Products
     const prodRes = msg.tool_calls.find(t => t.tool === 'search_products');
     if (prodRes && prodRes.result) {
       const d = prodRes.result.data;
@@ -105,6 +120,81 @@ export default function Message({ msg, isLatestAgentMsg, onAction }) {
             >
               <X size={16} /> Cancel (No)
             </button>
+          </div>
+        )}
+
+        {/* Real Food Dishes Carousel */}
+        {dishes.length > 0 && (
+          <div className="dishes-section-wrap">
+            <div className="section-label-bar">
+              <span className="section-label-title">
+                Recommended Dishes ({dishes.length})
+              </span>
+              <span className="section-label-sub">Real Swiggy Menu • Instant Add to Cart</span>
+            </div>
+
+            <div className="cards-carousel dishes-carousel">
+              {dishes.map((dish, idx) => (
+                <div 
+                  key={dish.id || idx} 
+                  className="dish-card"
+                  onClick={() => {
+                    setActiveModalItem(dish);
+                    setModalType('dish');
+                  }}
+                >
+                  <div className="dish-card-image-wrap">
+                    {dish.imageUrl ? (
+                      <img 
+                        src={dish.imageUrl} 
+                        alt={dish.name} 
+                        className="dish-card-img"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="dish-img-placeholder">
+                        <Utensils size={24} color="var(--orange-primary)" />
+                      </div>
+                    )}
+                    {dish.isBestseller && <span className="dish-bestseller-tag">⭐ Bestseller</span>}
+                  </div>
+
+                  <div className="dish-card-body">
+                    <div className="dish-veg-row">
+                      <div className={`veg-indicator ${dish.isVeg ? 'veg' : 'non-veg'}`}>
+                        <span className="veg-dot"></span>
+                      </div>
+                      {dish.rating && (
+                        <span className="dish-rating-badge">★ {dish.rating}</span>
+                      )}
+                    </div>
+
+                    <h4 className="dish-title">{dish.name}</h4>
+                    {dish.restaurantName && (
+                      <span className="dish-rest-sub">{dish.restaurantName}</span>
+                    )}
+
+                    <div className="dish-bottom-row">
+                      <span className="dish-price">₹{dish.price}</span>
+                      <button 
+                        className="dish-add-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onAddToCart) {
+                            onAddToCart(dish, dish.restaurantName);
+                          } else {
+                            onAction && onAction(`add 1 ${dish.name}`);
+                          }
+                        }}
+                      >
+                        <Plus size={14} />
+                        <span>ADD</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -224,7 +314,18 @@ export default function Message({ msg, isLatestAgentMsg, onAction }) {
                     className="card-btn primary green"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onAction && onAction(`add 1 ${prod.name}`);
+                      if (onAddToCart) {
+                        onAddToCart({
+                          id: prod.id || `im_${idx}`,
+                          name: prod.name,
+                          price: prod.price || prod.finalPrice || 0,
+                          imageUrl: prod.imageUrl,
+                          isVeg: true,
+                          type: 'instamart'
+                        }, 'Instamart Store');
+                      } else {
+                        onAction && onAction(`add 1 ${prod.name}`);
+                      }
                     }}
                   >
                     <Plus size={14} /> Add to Cart
@@ -261,7 +362,8 @@ export default function Message({ msg, isLatestAgentMsg, onAction }) {
           item={activeModalItem} 
           type={modalType} 
           onClose={() => setActiveModalItem(null)} 
-          onAction={onAction} 
+          onAction={onAction}
+          onAddToCart={onAddToCart}
         />
       )}
     </div>

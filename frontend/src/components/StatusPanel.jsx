@@ -1,7 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Shield, MapPin, Navigation, Search, Check, X, RefreshCw } from 'lucide-react';
+import { Shield, MapPin, Navigation, Search, Check, X, RefreshCw, ShoppingBag, Package } from 'lucide-react';
 
-export default function StatusPanel({ activeLocation, onLocationChange }) {
+export default function StatusPanel({ 
+  activeLocation, 
+  onLocationChange, 
+  cartCount = 0, 
+  onOpenCart, 
+  onOpenOrders 
+}) {
   const [servers, setServers] = useState({
     food: 'pending',
     instamart: 'pending',
@@ -230,6 +236,32 @@ export default function StatusPanel({ activeLocation, onLocationChange }) {
                 <span style={{ textTransform: 'capitalize' }}>{name}</span>
               </div>
             ))}
+          </div>
+
+          {/* Quick Nav: Orders & Cart Buttons */}
+          <div className="header-actions-group">
+            <button 
+              type="button" 
+              className="header-action-btn"
+              onClick={onOpenOrders}
+              title="Track live and past orders"
+            >
+              <Package size={15} color="var(--text-secondary)" />
+              <span>Orders</span>
+            </button>
+
+            <button 
+              type="button" 
+              className={`header-action-btn cart-header-btn ${cartCount > 0 ? 'has-items' : ''}`}
+              onClick={onOpenCart}
+              title="View your Swiggy cart"
+            >
+              <ShoppingBag size={15} />
+              <span>Cart</span>
+              {cartCount > 0 && (
+                <span className="header-cart-badge">{cartCount}</span>
+              )}
+            </button>
           </div>
         </div>
       </div>

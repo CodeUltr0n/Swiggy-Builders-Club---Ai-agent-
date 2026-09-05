@@ -1,15 +1,16 @@
 import React from 'react';
 import { X, Star, Clock, MapPin, ShoppingBag, Utensils, Calendar, Plus, Tag, ShieldCheck } from 'lucide-react';
 
-export default function ItemDetailModal({ item, type, onClose, onAction }) {
+export default function ItemDetailModal({ item, type, onClose, onAction, onAddToCart }) {
   if (!item) return null;
 
   const isProduct = type === 'product';
   const isDineout = type === 'dineout';
   const isFood = type === 'food';
+  const isDish = type === 'dish';
 
   const title = item.name || item.displayName || 'Details';
-  const subtitle = item.cuisine || item.brand || item.category || (isDineout ? 'Dining & Table Reservation' : 'Swiggy');
+  const subtitle = item.restaurantName || item.cuisine || item.brand || item.category || (isDineout ? 'Dining & Table Reservation' : 'Swiggy');
   const rating = item.rating || item.avgRating || '4.2';
   const distance = item.distance_km ? `${item.distance_km} km` : (item.distanceKm ? `${item.distanceKm} km` : '');
   const locality = item.locality || item.area || '';
@@ -75,8 +76,8 @@ export default function ItemDetailModal({ item, type, onClose, onAction }) {
             </span>
           </div>
 
-          {/* Pricing Row for Products */}
-          {isProduct && (
+          {/* Pricing Row for Products & Dishes */}
+          {(isProduct || isDish) && (
             <div className="modal-pricing-box">
               <div className="pricing-info">
                 <span className="current-price">₹{price}</span>
@@ -89,7 +90,15 @@ export default function ItemDetailModal({ item, type, onClose, onAction }) {
                   </>
                 )}
               </div>
-              <span className="stock-status in-stock">⚡ In Stock & Available</span>
+              <span className="stock-status in-stock">⚡ Fresh & Available to Order</span>
+            </div>
+          )}
+
+          {item.description && (
+            <div className="modal-section" style={{ marginTop: '12px' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.6 }}>
+                {item.description}
+              </p>
             </div>
           )}
 
@@ -116,11 +125,24 @@ export default function ItemDetailModal({ item, type, onClose, onAction }) {
                       className="add-dish-btn"
                       onClick={() => {
                         const cleanDish = dish.replace(/\s*\(₹[0-9.]+\)/, '').trim();
-                        onAction(`order ${cleanDish} from ${title}`);
+                        const priceMatch = dish.match(/₹([0-9.]+)/);
+                        const dishPrice = priceMatch ? parseFloat(priceMatch[1]) : 150;
+                        if (onAddToCart) {
+                          onAddToCart({
+                            id: `highlight_${i}_${item.id}`,
+                            name: cleanDish,
+                            price: dishPrice,
+                            is_veg: true,
+                            restaurant_id: item.id,
+                            restaurant_name: title
+                          }, title);
+                        } else {
+                          onAction(`order ${cleanDish} from ${title}`);
+                        }
                         onClose();
                       }}
                     >
-                      <Plus size={13} /> Order
+                      <Plus size={13} /> Add to Cart
                     </button>
                   </div>
                 ))}
@@ -130,11 +152,37 @@ export default function ItemDetailModal({ item, type, onClose, onAction }) {
 
           {/* Bottom CTA Action Buttons */}
           <div className="modal-footer">
+            {isDish && (
+              <button
+                className="modal-primary-btn orange"
+                onClick={() => {
+                  if (onAddToCart) {
+                    onAddToCart(item, item.restaurantName);
+                  } else {
+                    onAction(`order ${title}`);
+                  }
+                  onClose();
+                }}
+              >
+                <Plus size={18} /> Add to Cart (₹{price})
+              </button>
+            )}
+
             {isProduct && (
               <button
                 className="modal-primary-btn green"
                 onClick={() => {
-                  onAction(`add 1 ${title}`);
+                  if (onAddToCart) {
+                    onAddToCart({
+                      id: item.id,
+                      name: title,
+                      price: price,
+                      is_veg: true,
+                      type: 'instamart'
+                    }, 'Instamart Store');
+                  } else {
+                    onAction(`add 1 ${title}`);
+                  }
                   onClose();
                 }}
               >

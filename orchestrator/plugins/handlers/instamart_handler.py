@@ -13,6 +13,38 @@ from typing import Dict, Any, List
 logger = logging.getLogger(__name__)
 
 
+def _resolve_instamart_image(p: dict, first_var: dict, name: str) -> str:
+    """Resolve real Swiggy Instamart image or provide fresh grocery photography."""
+    raw = (
+        first_var.get("imageUrl") or 
+        p.get("imageUrl") or 
+        first_var.get("imageId") or 
+        p.get("imageId") or 
+        first_var.get("cloudinaryImageId") or 
+        p.get("cloudinaryImageId") or ""
+    )
+    if raw:
+        if raw.startswith("http"):
+            return raw
+        return f"https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_660/{raw}"
+
+    name_l = name.lower()
+    if any(k in name_l for k in ["milk", "dairy", "curd", "paneer", "cheese", "butter", "yogurt"]):
+        return "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_l for k in ["chip", "snack", "biscuit", "cookie", "namkeen", "popcorn"]):
+        return "https://images.unsplash.com/photo-1621996346565-e3d5d6281292?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_l for k in ["fruit", "apple", "banana", "mango", "orange"]):
+        return "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_l for k in ["veg", "onion", "potato", "tomato", "chilli", "carrot"]):
+        return "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_l for k in ["coke", "pepsi", "drink", "juice", "beverage", "water", "soda"]):
+        return "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_l for k in ["chocolate", "sweet", "candy"]):
+        return "https://images.unsplash.com/photo-1511381939415-e44015466834?w=660&auto=format&fit=crop&q=80"
+
+    return "https://images.unsplash.com/photo-1542838132-92c53300491e?w=660&auto=format&fit=crop&q=80"
+
+
 def register(router, client):
     """Register instamart handler with router."""
     handler = create_handler(client, router)
@@ -99,7 +131,7 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
                     norm_prod["mrp"] = price_obj.get("mrp") or p_val
                     
                     # Image URL & description
-                    norm_prod["imageUrl"] = first_var.get("imageUrl") or p.get("imageUrl") or ""
+                    norm_prod["imageUrl"] = _resolve_instamart_image(p, first_var, norm_prod["name"])
                     norm_prod["quantity"] = first_var.get("quantityDescription") or p.get("quantity") or ""
                     
                     # Stock & SLA

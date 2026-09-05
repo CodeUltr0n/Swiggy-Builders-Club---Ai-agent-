@@ -151,6 +151,35 @@ def _extract_dineout_restaurants(tool_result: dict) -> list:
     return []
 
 
+def _resolve_dineout_image(r: dict) -> str:
+    """Resolve Swiggy CDN image or provide stunning ambiance photography."""
+    raw = (
+        r.get("imageUrl") or 
+        r.get("mediaImageUrl") or 
+        r.get("mediaImageId") or 
+        r.get("imageId") or 
+        r.get("cloudinaryImageId") or ""
+    )
+    if raw:
+        if raw.startswith("http"):
+            return raw
+        return f"https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_660/{raw}"
+
+    name_c = (str(r.get("name", "")) + " " + str(r.get("cuisine", ""))).lower()
+    if any(k in name_c for k in ["hyatt", "park", "fine dining", "buffet", "luxury", "hotel"]):
+        return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["bar", "pub", "brew", "lounge"]):
+        return "https://images.unsplash.com/photo-1572116469696-31de0f17cc34?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["biryani", "mughlai", "tandoor", "sitara"]):
+        return "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["veg", "asthra", "south indian", "thali"]):
+        return "https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["cafe", "coffee", "bistro"]):
+        return "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=660&auto=format&fit=crop&q=80"
+
+    return "https://images.unsplash.com/photo-1552566626-52f8b828add9?w=660&auto=format&fit=crop&q=80"
+
+
 async def _search_restaurants(client, router, query, context, tool_logs, rankings):
     """Search Dineout restaurants with fast-path entity extraction and parallel execution."""
     search_query = ""
@@ -198,7 +227,6 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
         search_args["addressId"] = addr_id
 
     dine_res = await client.call_tool("dineout", "search_restaurants_dineout", search_args)
-    tool_logs.append({"tool": "search_restaurants_dineout", "args": search_args, "result": dine_res})
 
     raw_restaurants = _extract_dineout_restaurants(dine_res)
     restaurants = []
@@ -212,9 +240,21 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
         norm_r["cuisine"] = ", ".join(cuisines) if isinstance(cuisines, list) else (r.get("cuisine") or "Dining & Bar")
         norm_r["rating"] = r.get("rating") or r.get("avgRating") or "4.3"
         norm_r["avg_cost_for_two"] = r.get("costForTwo") or r.get("avgCostForTwo") or r.get("avg_cost_for_two") or "₹1,200"
-        norm_r["imageUrl"] = r.get("imageUrl") or r.get("mediaImageUrl") or ""
+        norm_r["imageUrl"] = _resolve_dineout_image(norm_r)
         norm_r["has_deals"] = bool(r.get("hasDeals") or r.get("deals"))
         restaurants.append(norm_r)
+
+    # Log structured restaurants for frontend card carousel
+    tool_logs.append({
+        "tool": "search_restaurants_dineout",
+        "args": search_args,
+        "result": {
+            "success": True,
+            "data": {
+                "restaurants": restaurants
+            }
+        }
+    })
 
     if restaurants:
         first = restaurants[0]

@@ -1,6 +1,10 @@
 import React from 'react';
 import { X, Star, Clock, MapPin, ShoppingBag, Utensils, Calendar, Plus, Tag, ShieldCheck } from 'lucide-react';
 
+const FALLBACK_FOOD_IMG = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=660&auto=format&fit=crop&q=80';
+const FALLBACK_REST_IMG = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=660&auto=format&fit=crop&q=80';
+const FALLBACK_GROCERY_IMG = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=660&auto=format&fit=crop&q=80';
+
 export default function ItemDetailModal({ item, type, onClose, onAction, onAddToCart }) {
   if (!item) return null;
 
@@ -19,6 +23,8 @@ export default function ItemDetailModal({ item, type, onClose, onAction, onAddTo
   const sla = item.sla || (isProduct ? '15-25 mins' : '30-40 mins');
   const menuHighlights = item.menu_highlights || [];
 
+  const fallbackImg = isDineout ? FALLBACK_REST_IMG : (isProduct ? FALLBACK_GROCERY_IMG : FALLBACK_FOOD_IMG);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
@@ -26,17 +32,18 @@ export default function ItemDetailModal({ item, type, onClose, onAction, onAddTo
           <X size={18} />
         </button>
 
-        {item.imageUrl && (
-          <div className="modal-image-container">
-            <img 
-              src={item.imageUrl} 
-              alt={title} 
-              className="modal-image" 
-              onError={(e) => { e.target.style.display = 'none'; }} 
-            />
-            {item.offer && <span className="modal-badge">{item.offer}</span>}
-          </div>
-        )}
+        <div className="modal-image-container">
+          <img 
+            src={item.imageUrl || fallbackImg} 
+            alt={title} 
+            className="modal-image" 
+            onError={(e) => { 
+              e.target.onerror = null;
+              e.target.src = fallbackImg;
+            }} 
+          />
+          {item.offer && <span className="modal-badge">{item.offer}</span>}
+        </div>
 
         <div className="modal-content">
           <div className="modal-header">

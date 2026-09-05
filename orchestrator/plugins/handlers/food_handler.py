@@ -13,6 +13,82 @@ from typing import Dict, Any, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _resolve_restaurant_image(r_info: dict, name: str = "", cuisine: str = "") -> str:
+    """Resolve real Swiggy restaurant image or provide curated restaurant photography."""
+    raw = (
+        r_info.get("cloudinaryImageId") or 
+        r_info.get("imageId") or 
+        r_info.get("mediaImageId") or 
+        r_info.get("imageUrl") or 
+        r_info.get("mediaImageUrl") or ""
+    )
+    if raw:
+        if raw.startswith("http"):
+            return raw
+        return f"https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_660/{raw}"
+
+    name_c = (str(name) + " " + str(cuisine)).lower()
+    if any(k in name_c for k in ["sweet", "mithai", "haldiram", "bikanervala", "agarwal", "dessert", "jalebi", "bakery"]):
+        return "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["biryani", "bawarchi", "paradise", "ghouse", "mughlai", "behrouz"]):
+        return "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["pizza", "domino", "hut", "oven", "italian"]):
+        return "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["burger", "mcdonald", "king", "wendy"]):
+        return "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["south indian", "dosa", "idli", "tiffin", "chutney", "soul creations", "veg"]):
+        return "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["cafe", "coffee", "starbucks", "bistro", "tea"]):
+        return "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["chinese", "noodle", "asian", "momos"]):
+        return "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["fine dining", "hyatt", "hotel", "luxury", "buffet"]):
+        return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=660&auto=format&fit=crop&q=80"
+
+    return "https://images.unsplash.com/photo-1552566626-52f8b828add9?w=660&auto=format&fit=crop&q=80"
+
+
+def _resolve_dish_image(item: dict, dish_name: str = "", cuisine: str = "") -> str:
+    """Resolve real Swiggy dish image or provide curated culinary photography."""
+    raw = (
+        item.get("imageId") or 
+        item.get("cloudinaryImageId") or 
+        item.get("imageUrl") or 
+        item.get("image") or 
+        item.get("mediaImageId") or ""
+    )
+    if raw:
+        if raw.startswith("http"):
+            return raw
+        return f"https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_660/{raw}"
+
+    name_c = (str(dish_name) + " " + str(cuisine)).lower()
+    if any(k in name_c for k in ["biryani", "pulao", "rice"]):
+        return "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["sweet", "gulab jamun", "jalebi", "halwa", "rasgulla", "laddu", "peda", "dessert", "kheer", "rabdi"]):
+        return "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["pizza"]):
+        return "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["burger", "sandwich"]):
+        return "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["dosa", "idli", "vada", "south indian", "uttapam"]):
+        return "https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["paneer", "curry", "dal", "gravy", "roti", "naan", "sabji", "khichdi"]):
+        return "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["chicken", "tandoori", "tikka", "kebab", "meat", "mutton", "fish"]):
+        return "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["noodle", "fried rice", "manchurian", "chinese", "momos"]):
+        return "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["chaat", "samosa", "snack", "kachori", "pakoda"]):
+        return "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["cake", "pastry", "brownie", "ice cream"]):
+        return "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=660&auto=format&fit=crop&q=80"
+    if any(k in name_c for k in ["tea", "chai", "coffee", "shake", "beverage", "lassi", "juice"]):
+        return "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=660&auto=format&fit=crop&q=80"
+
+    return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=660&auto=format&fit=crop&q=80"
+
+
 def _extract_restaurants(tool_result: dict) -> list:
     """Safely extract restaurant list from a call_tool result.
 
@@ -30,8 +106,14 @@ def _extract_restaurants(tool_result: dict) -> list:
     structured = tool_result.get("structured")
     if isinstance(structured, dict):
         if "restaurants" in structured and isinstance(structured["restaurants"], list) and structured["restaurants"]:
+            for r in structured["restaurants"]:
+                if isinstance(r, dict) and not r.get("imageUrl"):
+                    r["imageUrl"] = _resolve_restaurant_image(r, r.get("name", ""), r.get("cuisine", ""))
             return structured["restaurants"]
         if "data" in structured and isinstance(structured["data"], dict) and "restaurants" in structured["data"]:
+            for r in structured["data"]["restaurants"]:
+                if isinstance(r, dict) and not r.get("imageUrl"):
+                    r["imageUrl"] = _resolve_restaurant_image(r, r.get("name", ""), r.get("cuisine", ""))
             return structured["data"]["restaurants"]
 
     data = tool_result.get("data")
@@ -40,15 +122,24 @@ def _extract_restaurants(tool_result: dict) -> list:
 
     # data is already a list
     if isinstance(data, list):
+        for r in data:
+            if isinstance(r, dict) and not r.get("imageUrl"):
+                r["imageUrl"] = _resolve_restaurant_image(r, r.get("name", ""), r.get("cuisine", ""))
         return data
 
     # data is a dict
     if isinstance(data, dict):
         if "restaurants" in data and isinstance(data["restaurants"], list) and data["restaurants"]:
+            for r in data["restaurants"]:
+                if isinstance(r, dict) and not r.get("imageUrl"):
+                    r["imageUrl"] = _resolve_restaurant_image(r, r.get("name", ""), r.get("cuisine", ""))
             return data["restaurants"]
         if "data" in data and isinstance(data["data"], dict):
             inner_rest = data["data"].get("restaurants", [])
             if inner_rest and isinstance(inner_rest, list):
+                for r in inner_rest:
+                    if isinstance(r, dict) and not r.get("imageUrl"):
+                        r["imageUrl"] = _resolve_restaurant_image(r, r.get("name", ""), r.get("cuisine", ""))
                 return inner_rest
 
         # If dishes are returned, extract restaurants from dishes
@@ -64,6 +155,7 @@ def _extract_restaurants(tool_result: dict) -> list:
                         "name": r_name or "Restaurant",
                         "cuisine": d.get("category", "Food"),
                         "rating": d.get("restaurantRating", "4.0"),
+                        "imageUrl": _resolve_restaurant_image({}, r_name or "Restaurant", d.get("category", "Food")),
                         "menu_highlights": [f"{d.get('name')} (Rs.{d.get('price', '?')})"],
                     }
                 elif r_id and len(dish_restaurants[r_id]["menu_highlights"]) < 3:
@@ -115,6 +207,7 @@ def _extract_restaurants(tool_result: dict) -> list:
                 "cuisine": cuisine or "Multi-cuisine",
                 "rating": rating,
                 "distance_km": 1.5,
+                "imageUrl": _resolve_restaurant_image({}, clean_name, cuisine),
             })
         if text_restaurants:
             return text_restaurants
@@ -131,12 +224,15 @@ def _extract_from_cards(cards: list) -> list:
         # Navigate into card -> card -> info structure
         info = card.get("card", {}).get("card", {}).get("info", card.get("info", {}))
         if isinstance(info, dict) and info.get("id"):
+            c_str = ", ".join(info.get("cuisines", [])) if isinstance(info.get("cuisines"), list) else info.get("cuisine", "")
+            img = _resolve_restaurant_image(info, info.get("name", ""), c_str)
             restaurants.append({
                 "id": info.get("id"),
                 "name": info.get("name", "Unknown"),
-                "cuisine": ", ".join(info.get("cuisines", [])) if isinstance(info.get("cuisines"), list) else info.get("cuisine", ""),
+                "cuisine": c_str,
                 "rating": info.get("avgRating", info.get("rating", "N/A")),
                 "distance_km": info.get("sla", {}).get("lastMileTravel", 0) if isinstance(info.get("sla"), dict) else 0,
+                "imageUrl": img,
             })
         # Also check for restaurant list inside card gridElements
         grid = card.get("card", {}).get("card", {}).get("gridElements", {})
@@ -145,12 +241,15 @@ def _extract_from_cards(cards: list) -> list:
             for r_wrapper in info_list:
                 r_info = r_wrapper.get("info", {}) if isinstance(r_wrapper, dict) else {}
                 if r_info.get("id"):
+                    c_str = ", ".join(r_info.get("cuisines", [])) if isinstance(r_info.get("cuisines"), list) else ""
+                    img = _resolve_restaurant_image(r_info, r_info.get("name", ""), c_str)
                     restaurants.append({
                         "id": r_info.get("id"),
                         "name": r_info.get("name", "Unknown"),
-                        "cuisine": ", ".join(r_info.get("cuisines", [])) if isinstance(r_info.get("cuisines"), list) else "",
+                        "cuisine": c_str,
                         "rating": r_info.get("avgRating", "N/A"),
                         "distance_km": r_info.get("sla", {}).get("lastMileTravel", 0) if isinstance(r_info.get("sla"), dict) else 0,
+                        "imageUrl": img,
                     })
     return restaurants
 
@@ -374,9 +473,7 @@ def _extract_dishes_from_menu(menu_data: Any, r_id: str, r_name: str) -> list:
         if is_veg is None:
             is_veg = item.get("itemAttribute", {}).get("vegClassifier") == "VEG" if isinstance(item.get("itemAttribute"), dict) else False
 
-        img = item.get("imageUrl") or item.get("image") or ""
-        if img and not img.startswith("http"):
-            img = f"https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_300,h_300,c_fit/{img}"
+        img = _resolve_dish_image(item, name, r_name)
 
         rating_val = "4.2"
         if item.get("rating"):
@@ -529,7 +626,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                         "price": float(dd.get("price", 0) if dd.get("price") else 0),
                         "isVeg": bool(dd.get("isVeg", False)),
                         "rating": str(dd.get("rating", "4.2")),
-                        "imageUrl": dd.get("imageUrl", ""),
+                        "imageUrl": _resolve_dish_image(dd, dd.get("name", ""), dd.get("restaurantName", "")),
                         "description": dd.get("description", ""),
                         "isBestseller": bool(dd.get("isBestseller", False)),
                         "inStock": dd.get("inStock", 1)
@@ -580,6 +677,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 "cuisine": r.get("cuisine", ", ".join(r.get("cuisines", [])) if isinstance(r.get("cuisines"), list) else ""),
                 "rating": r.get("rating", r.get("avgRating", "N/A")),
                 "distance_km": r.get("distance_km", r.get("distanceKm", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0)),
+                "imageUrl": r.get("imageUrl") or _resolve_restaurant_image(r, r_name, r.get("cuisine", "")),
                 "menu_highlights": menu_highlights,
                 "dishes": dishes,
             })
@@ -600,6 +698,19 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 }
             }
         })
+
+    # Log structured restaurants for frontend card carousel
+    structured_rests = restaurant_options if restaurant_options else restaurants
+    tool_logs.append({
+        "tool": "search_restaurants",
+        "args": {"addressId": address["id"], "query": search_query},
+        "result": {
+            "success": True,
+            "data": {
+                "restaurants": structured_rests
+            }
+        }
+    })
 
     if restaurant_options:
         first = restaurant_options[0]

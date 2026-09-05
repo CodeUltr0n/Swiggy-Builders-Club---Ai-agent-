@@ -4,6 +4,10 @@ import ItemDetailModal from './ItemDetailModal';
 import ReactMarkdown from 'react-markdown';
 import { Bot, User, Plus, ShoppingBag, Utensils, Calendar, Info, Check, X } from 'lucide-react';
 
+export const FALLBACK_FOOD_IMG = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=660&auto=format&fit=crop&q=80';
+export const FALLBACK_REST_IMG = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=660&auto=format&fit=crop&q=80';
+export const FALLBACK_GROCERY_IMG = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=660&auto=format&fit=crop&q=80';
+
 export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }) {
   const isAgent = msg.role === 'agent';
   const [activeModalItem, setActiveModalItem] = useState(null);
@@ -22,26 +26,35 @@ export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }
       dishes = dishTool.result.data.dishes;
     }
 
-    // 2. Extract Restaurants
-    const searchRes = msg.tool_calls.find(t => t.tool === 'search_restaurants' || t.tool === 'search_restaurants_dineout');
-    if (searchRes && searchRes.result) {
+    // 2. Extract Restaurants (search across all matching tool calls)
+    const restaurantTools = msg.tool_calls.filter(t => t.tool === 'search_restaurants' || t.tool === 'search_restaurants_dineout');
+    for (const searchRes of restaurantTools) {
+      if (!searchRes?.result) continue;
       if (searchRes.tool === 'search_restaurants_dineout') {
         isDineoutServer = true;
       }
-      const d = searchRes.result.data;
+      let d = searchRes.result.data;
+      if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch (e) {}
+      }
       const s = searchRes.result.structured;
+      let foundRests = [];
       if (Array.isArray(d)) {
-        restaurants = d;
+        foundRests = d;
       } else if (d && Array.isArray(d.restaurants)) {
-        restaurants = d.restaurants;
+        foundRests = d.restaurants;
         if (!dishes.length && Array.isArray(d.dishes)) {
           dishes = d.dishes;
         }
       } else if (s && Array.isArray(s.restaurants)) {
-        restaurants = s.restaurants;
+        foundRests = s.restaurants;
         if (!dishes.length && Array.isArray(s.dishes)) {
           dishes = s.dishes;
         }
+      }
+      if (foundRests.length > 0) {
+        restaurants = foundRests;
+        break;
       }
     }
 
@@ -234,18 +247,15 @@ export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }
                     }}
                   >
                     <div className="dish-card-image-wrap">
-                      {dish.imageUrl ? (
-                        <img 
-                          src={dish.imageUrl} 
-                          alt={dish.name} 
-                          className="dish-card-img"
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      ) : (
-                        <div className="dish-img-placeholder">
-                          <Utensils size={24} color="var(--orange-primary)" />
-                        </div>
-                      )}
+                      <img 
+                        src={dish.imageUrl || FALLBACK_FOOD_IMG} 
+                        alt={dish.name} 
+                        className="dish-card-img"
+                        onError={(e) => { 
+                          e.target.onerror = null;
+                          e.target.src = FALLBACK_FOOD_IMG;
+                        }}
+                      />
                       {dish.isBestseller && <span className="dish-bestseller-tag">⭐ Bestseller</span>}
                     </div>
 
@@ -303,14 +313,15 @@ export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }
                       setActiveModalItem(rest);
                       setModalType(isDineoutServer ? 'dineout' : 'food');
                     }}>
-                      {rest.imageUrl && (
-                        <img 
-                          src={rest.imageUrl} 
-                          alt={rest.name} 
-                          className="card-image"
-                          onError={(e) => { e.target.style.display = 'none'; }} 
-                        />
-                      )}
+                      <img 
+                        src={rest.imageUrl || (isDineoutServer ? FALLBACK_REST_IMG : FALLBACK_FOOD_IMG)} 
+                        alt={rest.name} 
+                        className="card-image"
+                        onError={(e) => { 
+                          e.target.onerror = null;
+                          e.target.src = isDineoutServer ? FALLBACK_REST_IMG : FALLBACK_FOOD_IMG;
+                        }} 
+                      />
                       {rest.offer && <div className="card-badge">{rest.offer}</div>}
                       <div className="card-title">{rest.name}</div>
                       <div className="card-subtitle">{cuisineStr}</div>
@@ -385,14 +396,15 @@ export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }
                     setActiveModalItem(prod);
                     setModalType('product');
                   }}>
-                    {prod.imageUrl && (
                       <img 
-                        src={prod.imageUrl} 
+                        src={prod.imageUrl || FALLBACK_GROCERY_IMG} 
                         alt={prod.name} 
                         className="card-image"
-                        onError={(e) => { e.target.style.display = 'none'; }} 
+                        onError={(e) => { 
+                          e.target.onerror = null;
+                          e.target.src = FALLBACK_GROCERY_IMG;
+                        }} 
                       />
-                    )}
                     <div className="card-title" style={{ fontSize: '15px' }}>{prod.name}</div>
                     <div className="card-subtitle">{prod.brand || prod.category || prod.weight || 'Grocery'}</div>
                     <div className="card-meta">

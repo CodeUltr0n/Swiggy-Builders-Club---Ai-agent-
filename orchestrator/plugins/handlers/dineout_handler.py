@@ -49,10 +49,23 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
         })
         search_query = entities.get("restaurant_name") or entities.get("cuisine") or ""
 
+    if not search_query:
+        import re
+        match = re.search(r'(?:search for|find|show|book|reserve|at)\s+([a-zA-Z\s]+?)(?:\s+in|\s+near|\s+for|\s+on\s+dineout|$)', query, re.IGNORECASE)
+        if match:
+            search_query = match.group(1).strip()
+
+    search_query = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|table\s+for\s+\d+\s+at\s+|table\s+at\s+|dining\s+|restaurants\s+on\s+dineout)+', '', search_query.strip(), flags=re.IGNORECASE).strip()
+    if not search_query or search_query.lower() in ["dineout", "restaurants", "dining", "table"]:
+        search_query = "dining"
+
     dine_res = await client.call_tool("dineout", "search_restaurants_dineout", {"query": search_query})
+    if not dine_res.get("success"):
+        dine_res = await client.call_tool("dineout", "search_restaurants", {"query": search_query})
     tool_logs.append({"tool": "search_restaurants_dineout", "args": {"query": search_query}, "result": dine_res})
 
-    restaurants = dine_res.get("data", {}).get("restaurants", []) if dine_res.get("success") else []
+    dine_data = dine_res.get("data") if (dine_res.get("success") and isinstance(dine_res.get("data"), dict)) else {}
+    restaurants = dine_data.get("restaurants", [])
 
     deals_info = []
     if restaurants:
@@ -62,7 +75,8 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
 
         details_res = await client.call_tool("dineout", "get_restaurant_details", {"restaurantId": first["id"]})
         tool_logs.append({"tool": "get_restaurant_details", "args": {"restaurantId": first["id"]}, "result": details_res})
-        deals_info = details_res.get("data", {}).get("deals", []) if details_res.get("success") else []
+        d_data = details_res.get("data") if (details_res.get("success") and isinstance(details_res.get("data"), dict)) else {}
+        deals_info = d_data.get("deals", [])
 
     # LLM Dynamic Reasoning & Response Generation
     if router.llm and router.llm.api_key:
@@ -106,7 +120,7 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
     text = f"**Dineout** (Priority Score: {rankings[0][1]}):\n\nTop restaurants:\n"
     for i, r in enumerate(restaurants[:3]):
         deal = " *(Deals available)*" if r.get("has_deals") else ""
-        text += f"  {i + 1}. **{r['name']}** — {r['cuisine']} ({r['rating']}★, Rs.{r['avg_cost_for_two']} for two){deal}\n"
+        text += f"  {i + 1}. **{r['name']}** — {r['cuisine']} ({r['rating']}★, Rs.{r.get('avg_cost_for_two', 'N/A')} for two){deal}\n"
 
     if deals_info:
         first_name = restaurants[0]["name"]
@@ -145,18 +159,25 @@ async def _book_table(client, router, query, context, tool_logs):
         mentioned_rest = entities.get("restaurant_name")
         if mentioned_rest:
             search_res = await client.call_tool("dineout", "search_restaurants_dineout", {"query": mentioned_rest})
+            if not search_res.get("success"):
+                search_res = await client.call_tool("dineout", "search_restaurants", {"query": mentioned_rest})
             tool_logs.append({"tool": "search_restaurants_dineout", "args": {"query": mentioned_rest}, "result": search_res})
-            if search_res.get("success") and search_res.get("data", {}).get("restaurants"):
-                found = search_res["data"]["restaurants"][0]
+            s_data = search_res.get("data") if (search_res.get("success") and isinstance(search_res.get("data"), dict)) else {}
+            if s_data.get("restaurants"):
+                found = s_data["restaurants"][0]
                 rest_id = found["id"]
                 router.current_state["active_restaurant_id"] = found["id"]
                 router.current_state["active_restaurant_name"] = found["name"]
 
     if not rest_id:
-        search_res = await client.call_tool("dineout", "search_restaurants_dineout", {"query": ""})
-        tool_logs.append({"tool": "search_restaurants_dineout", "args": {"query": ""}, "result": search_res})
-        if search_res.get("success") and search_res.get("data", {}).get("restaurants"):
-            found = search_res["data"]["restaurants"][0]
+        fallback_query = "dining"
+        search_res = await client.call_tool("dineout", "search_restaurants_dineout", {"query": fallback_query})
+        if not search_res.get("success"):
+            search_res = await client.call_tool("dineout", "search_restaurants", {"query": fallback_query})
+        tool_logs.append({"tool": "search_restaurants_dineout", "args": {"query": fallback_query}, "result": search_res})
+        s_data = search_res.get("data") if (search_res.get("success") and isinstance(search_res.get("data"), dict)) else {}
+        if s_data.get("restaurants"):
+            found = s_data["restaurants"][0]
             rest_id = found["id"]
             router.current_state["active_restaurant_id"] = found["id"]
             router.current_state["active_restaurant_name"] = found["name"]
@@ -168,15 +189,16 @@ async def _book_table(client, router, query, context, tool_logs):
                 "state": router.current_state,
             }
 
-
     details_res = await client.call_tool("dineout", "get_restaurant_details", {"restaurantId": rest_id})
     tool_logs.append({"tool": "get_restaurant_details", "args": {"restaurantId": rest_id}, "result": details_res})
 
+    d_data = details_res.get("data") if (details_res.get("success") and isinstance(details_res.get("data"), dict)) else {}
+    deals = d_data.get("deals", [])
     deal_id = "deal_001"
-    if details_res.get("success") and details_res.get("data", {}).get("deals"):
-        free_deals = [d for d in details_res["data"]["deals"] if d.get("isFree")]
+    if deals:
+        free_deals = [d for d in deals if d.get("isFree")]
         if free_deals:
-            deal_id = free_deals[0]["id"]
+            deal_id = free_deals[0].get("id", deal_id)
 
     cart_res = await client.call_tool("dineout", "create_cart", {
         "restaurantId": rest_id,

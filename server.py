@@ -386,6 +386,61 @@ async def auth_status():
     }
 
 
+@app.post("/auth/set-token")
+async def set_token_api(request: Request):
+    """Manually set an access token."""
+    global mcp_initialized
+    body = await request.json()
+    token = body.get("access_token") or body.get("token")
+    if not token:
+        return JSONResponse({"error": "Missing 'access_token' parameter"}, status_code=400)
+
+    expires_in = float(body.get("expires_in", 432000))
+    oauth_client.set_token(token=token, expires_in=expires_in)
+    mcp_initialized = False
+    if orchestrator:
+        mcp_client = getattr(orchestrator, 'mcp_client', None)
+        if mcp_client:
+            mcp_client.reset_session()
+            try:
+                await mcp_client.initialize_all()
+                mcp_initialized = True
+            except Exception as e:
+                logger.warning(f"MCP init failed after set-token: {e}")
+
+    return {
+        "status": "ok",
+        "authenticated": oauth_client.is_authenticated(),
+        "expires_in_hours": round(oauth_client.time_until_expiry() / 3600, 2),
+    }
+
+
+@app.get("/debug/tools")
+async def debug_tools():
+    """List all real MCP tools and schemas available on connected servers."""
+    if not oauth_client.is_authenticated():
+        return JSONResponse({"error": "Not authenticated. Connect at /auth/start"}, status_code=401)
+    orch = await get_orchestrator()
+    mcp = getattr(orch, 'mcp_client', None)
+    if not mcp:
+        return JSONResponse({"error": "MCP client not initialized"}, status_code=500)
+    out = {}
+    for s in ["food", "instamart", "dineout"]:
+        try:
+            tools = await mcp.list_tools(s)
+            out[s] = [
+                {
+                    "name": t.get("name"),
+                    "description": t.get("description", "")[:120],
+                    "required": t.get("inputSchema", {}).get("required", []) if isinstance(t.get("inputSchema"), dict) else []
+                }
+                for t in tools
+            ]
+        except Exception as e:
+            out[s] = {"error": str(e)}
+    return out
+
+
 # ============================================================
 #  Chat / Query Endpoint
 # ============================================================

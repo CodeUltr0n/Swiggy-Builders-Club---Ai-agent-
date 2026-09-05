@@ -47,12 +47,14 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
             "product_name": "string or null — the grocery/product to search for",
         })
         search_query = entities.get("product_name") or ""
-    else:
+
+    if not search_query:
         match = re.search(r'(?:search|find|need|buy|get|want)\s+(.+?)(?:\s*(?:near|for|please|on instamart)|$)', query.lower())
         search_query = match.group(1).strip() if match else query.lower()
 
     # Strip conversational filler: 'me', 'some', 'a', 'an', 'need', 'buy'
     search_query = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|need\s+|buy\s+|get\s+)+', '', search_query.strip(), flags=re.IGNORECASE).strip()
+    search_query = re.sub(r'\s+on\s+instamart.*$', '', search_query, flags=re.IGNORECASE).strip()
 
     if not search_query:
         search_query = "groceries"
@@ -70,14 +72,8 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
         })
         tool_logs.append({"tool": "search_products", "args": {"addressId": address.get("id", ""), "query": term}, "result": prod_res})
         if prod_res.get("success"):
-            prod_data = prod_res.get("data", {})
-            # Handle different formats
-            if isinstance(prod_data, dict):
-                prod_list = prod_data.get("products", prod_data.get("data", []))
-            elif isinstance(prod_data, list):
-                prod_list = prod_data
-            else:
-                prod_list = []
+            prod_data = prod_res.get("data") if isinstance(prod_res.get("data"), dict) else {}
+            prod_list = prod_data.get("products", prod_data.get("data", []))
             if isinstance(prod_list, list):
                 for p in prod_list:
                     if isinstance(p, dict) and p.get("id") and p["id"] not in seen_ids:
@@ -152,17 +148,22 @@ async def _add_to_cart(client, router, query, address, tool_logs):
         })
         item_name = entities.get("product_name", "")
         quantity = entities.get("quantity", 1) or 1
-    else:
+
+    if not item_name:
         qty_match = re.search(r'(\d+)\s+(.+)', query.lower())
         if qty_match:
             quantity = int(qty_match.group(1))
             item_name = qty_match.group(2).strip()
         else:
-            item_name = query.lower().replace("add", "").replace("to cart", "").replace("instamart", "").strip()
+            item_name = re.sub(r'^(?:add|order|buy|get)\s+', '', query.lower(), flags=re.IGNORECASE)
+            item_name = re.sub(r'\s+to\s+cart.*$', '', item_name, flags=re.IGNORECASE)
+            item_name = re.sub(r'\s+on\s+instamart.*$', '', item_name, flags=re.IGNORECASE).strip()
+
+    item_name = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|packet\s+of\s+|packets\s+of\s+|bottle\s+of\s+|bottles\s+of\s+)+', '', item_name.strip(), flags=re.IGNORECASE).strip()
 
     if not item_name:
         return {
-            "response_text": "What would you like to add? Try: 'add 2 packets of milk'.",
+            "response_text": "What would you like to add? Try: 'add 2 milk'.",
             "tool_calls": tool_logs,
             "active_server": "instamart",
             "state": router.current_state,
@@ -173,7 +174,10 @@ async def _add_to_cart(client, router, query, address, tool_logs):
     })
     tool_logs.append({"tool": "search_products", "args": {"addressId": address["id"], "query": item_name}, "result": prod_res})
 
-    if not prod_res.get("success") or not prod_res.get("data", {}).get("products"):
+    prod_data = prod_res.get("data") if (prod_res.get("success") and isinstance(prod_res.get("data"), dict)) else {}
+    products = prod_data.get("products", [])
+
+    if not products:
         return {
             "response_text": f"Could not find '{item_name}' on Instamart.",
             "tool_calls": tool_logs,

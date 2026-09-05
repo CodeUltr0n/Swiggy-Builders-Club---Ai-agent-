@@ -303,9 +303,24 @@ class SwiggyOAuthClient:
         """Get the current access token. Returns None if expired or not set."""
         if self._access_token and time.time() < self._token_expires_at:
             return self._access_token
+        # Check environment variable
+        import os
+        env_token = os.environ.get("SWIGGY_BEARER_TOKEN") or os.environ.get("SWIGGY_ACCESS_TOKEN")
+        if env_token:
+            self._access_token = env_token
+            self._token_expires_at = time.time() + 432000
+            return self._access_token
         if self._access_token:
             logger.warning("Token expired. Need to re-authenticate.")
         return None
+
+    def set_token(self, token: str, expires_in: float = 432000, scope: str = ""):
+        """Manually set an access token."""
+        self._access_token = token
+        self._token_expires_at = time.time() + expires_in
+        self._scope = scope
+        self._persist_token({"access_token": token, "expires_in": expires_in, "scope": scope})
+        logger.info("Manual token set and persisted.")
 
     def is_authenticated(self) -> bool:
         """Check if we have a valid (non-expired) token."""
@@ -331,7 +346,15 @@ class SwiggyOAuthClient:
             logger.info("Token persisted to store")
 
     def restore_from_store(self) -> bool:
-        """Restore token from store on startup."""
+        """Restore token from store or env var on startup."""
+        import os
+        env_token = os.environ.get("SWIGGY_BEARER_TOKEN") or os.environ.get("SWIGGY_ACCESS_TOKEN")
+        if env_token:
+            self._access_token = env_token
+            self._token_expires_at = time.time() + 432000
+            logger.info("Token restored from environment variable.")
+            return True
+
         if not self.token_store or not hasattr(self.token_store, "get_preference"):
             return False
 

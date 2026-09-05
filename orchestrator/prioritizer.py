@@ -140,12 +140,18 @@ class ContextPrioritizer:
         """Simple keyword matching fallback when LLM is unavailable."""
         query_lower = query.lower()
 
+        # Direct service mentions take absolute precedence
+        if "dineout" in query_lower:
+            return "dineout", "Explicit mention of Dineout in query"
+        if "instamart" in query_lower:
+            return "instamart", "Explicit mention of Instamart in query"
+
         # Food cooked meals keywords
         food_kw = ["biryani", "burger", "pizza", "hungry", "order food", "restaurant", "menu", "takeout", "swiggy food", "sweet", "dessert", "cake", "ice cream", "gulab jamun", "rasgulla", "pastry", "brownie", "milkshake", "kulfi", "mithai", "jalebi"]
         # Instamart grocery & raw ingredients keywords
         im_kw = ["milk", "egg", "eggs", "bread", "butter", "cheese", "groceries", "grocery", "tomato", "onion", "vegetables", "fruits", "chips", "coke", "ghee", "detergent", "soap", "curd", "paneer", "atta", "rice", "oil", "sugar", "salt", "tea", "coffee", "biscuits", "biscuit", "snacks"]
         # Dineout table reservation keywords
-        dine_kw = ["table", "reserve", "dineout", "pub", "book", "go out", "fine dining", "reservation", "booking"]
+        dine_kw = ["table", "reserve", "pub", "book", "go out", "fine dining", "reservation", "booking", "dining"]
 
         f_cnt = sum(1 for kw in food_kw if kw in query_lower)
         i_cnt = sum(1 for kw in im_kw if kw in query_lower)
@@ -154,10 +160,10 @@ class ContextPrioritizer:
         # Grocery items take precedence for Instamart
         if i_cnt > 0 and i_cnt >= f_cnt and i_cnt >= d_cnt:
             return "instamart", f"Keyword intent match for Instamart (items: {', '.join([k for k in im_kw if k in query_lower])})"
+        elif d_cnt > 0 and d_cnt >= f_cnt and d_cnt >= i_cnt:
+            return "dineout", f"Keyword intent match for Dineout (items: {', '.join([k for k in dine_kw if k in query_lower])})"
         elif f_cnt > i_cnt and f_cnt > d_cnt:
             return "food", f"Keyword intent match for Food (items: {', '.join([k for k in food_kw if k in query_lower])})"
-        elif d_cnt > f_cnt and d_cnt > i_cnt:
-            return "dineout", f"Keyword intent match for Dineout (items: {', '.join([k for k in dine_kw if k in query_lower])})"
         return None
 
 

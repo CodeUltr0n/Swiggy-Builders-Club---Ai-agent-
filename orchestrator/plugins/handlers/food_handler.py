@@ -324,30 +324,38 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             "result": menu_res,
         })
 
-        # Extract menu items — handle multiple formats
-        menu_data = menu_res.get("data", {}) if menu_res.get("success") else {}
+        # Extract menu items — handle Swiggy MCP categories format & direct items
+        menu_data = menu_res.get("data", {}) if (menu_res.get("success") and isinstance(menu_res.get("data"), dict)) else {}
+        items = []
         if isinstance(menu_data, dict):
-            items = menu_data.get("items", menu_data.get("menu", []))
-            if isinstance(items, dict):
-                items = items.get("items", items.get("categories", []))
+            categories = menu_data.get("categories", [])
+            if isinstance(categories, list):
+                for cat in categories:
+                    if isinstance(cat, dict):
+                        cat_items = cat.get("items", [])
+                        if isinstance(cat_items, list):
+                            items.extend(cat_items)
+            if not items:
+                direct_items = menu_data.get("items", menu_data.get("menu", []))
+                if isinstance(direct_items, list):
+                    items = direct_items
+                elif isinstance(direct_items, dict):
+                    items = direct_items.get("items", direct_items.get("categories", []))
         elif isinstance(menu_data, list):
             items = menu_data
-        else:
-            items = []
 
         if not isinstance(items, list):
             items = []
 
-        # Build menu highlights safely
+        # Build menu highlights safely with Indian Rupee symbol
         menu_highlights = []
-        for it in items[:4]:
+        for it in items[:6]:
             if isinstance(it, dict):
                 item_name = it.get("name", it.get("itemName", "Item"))
                 item_price = it.get("price", it.get("defaultPrice", it.get("finalPrice", "?")))
-                # Swiggy sometimes returns price in paise (divide by 100)
                 if isinstance(item_price, (int, float)) and item_price > 1000:
                     item_price = item_price / 100
-                menu_highlights.append(f"{item_name} (Rs.{item_price})")
+                menu_highlights.append(f"{item_name} (₹{item_price})")
 
         restaurant_options.append({
             "id": r_id,
@@ -356,6 +364,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             "rating": r.get("rating", r.get("avgRating", "N/A")),
             "distance_km": r.get("distance_km", r.get("distanceKm", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0)),
             "menu_highlights": menu_highlights,
+            "menu_items": items,
         })
 
     if restaurant_options:
@@ -383,8 +392,6 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 "You are the Swiggy MCP Food Orchestrator. "
                 "The user is asking for food/sweets/meals. "
                 "Analyze their request based on their location, time of day/demand, and the retrieved open restaurants and menus. "
-                "If the specific item requested (e.g. sweets/desserts) is not directly available from open restaurants, "
-                "explain why politely, evaluate the best available open alternatives or dishes, and suggest how to order them. "
                 "Format cleanly using GitHub Markdown with bold restaurant names and prices."
             )
         )
@@ -401,14 +408,22 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
     text = f"**Food Server** (Priority Score: {rankings[0][1]}):\n\n"
     loc_label = address.get('label') or address.get('address_line') or address.get('city') or 'your location'
     if restaurant_options:
-        text += f"Open restaurants near **{loc_label}**:\n"
+        text += f"Open restaurants near **{loc_label}**:\n\n"
         for i, r in enumerate(restaurant_options):
-            text += f"  {i + 1}. **{r['name']}** — {r['cuisine']} ({r['rating']}★)\n"
-
-        if restaurant_options[0].get("menu_highlights"):
-            text += f"\nPopular items at **{restaurant_options[0]['name']}**:\n"
-            for item_str in restaurant_options[0]["menu_highlights"]:
-                text += f"  • {item_str}\n"
+            meta_parts = []
+            if r.get('cuisine'):
+                meta_parts.append(r['cuisine'])
+            if r.get('rating') and r['rating'] != 'N/A':
+                meta_parts.append(f"{r['rating']}★")
+            if r.get('distance_km'):
+                meta_parts.append(f"{r['distance_km']} km")
+            meta_str = f" — {', '.join(meta_parts)}" if meta_parts else ""
+            text += f"{i + 1}. **{r['name']}**{meta_str}\n"
+            if r.get("menu_highlights"):
+                text += f"   *Popular items:*\n"
+                for item_str in r["menu_highlights"][:4]:
+                    text += f"   • {item_str}\n"
+            text += "\n"
     elif raw_text and len(raw_text.strip()) > 10:
         text += f"{raw_text}\n"
     else:
@@ -464,6 +479,12 @@ async def _add_to_cart(client, router, query, address, tool_logs):
             raw_items.append((qty_match.group(2).strip(), int(qty_match.group(1))))
 
     if not raw_items:
+        clean_q = re.sub(r'^(?:order|buy|get|add)\s+', '', query, flags=re.IGNORECASE)
+        clean_q = re.sub(r'\s+to\s+cart.*$', '', clean_q, flags=re.IGNORECASE).strip()
+        if clean_q:
+            raw_items.append((clean_q, 1))
+
+    if not raw_items:
         return {
             "response_text": "Please specify the item and quantity you would like to add to your cart.",
             "tool_calls": tool_logs,
@@ -475,10 +496,15 @@ async def _add_to_cart(client, router, query, address, tool_logs):
     matched_items_by_rest = {}
     not_found = []
 
+    # Get active restaurant ID or search restaurants to find one
+    target_rest_id = router.current_state.get("active_restaurant_id")
+    target_rest_name = router.current_state.get("active_restaurant_name", "Restaurant")
+
     for name_str, qty in raw_items:
         clean_search = re.sub(r'\s+from\s+.*|\s+to\s+cart.*', '', name_str, flags=re.IGNORECASE).strip()
         search_term = clean_search.lower().rstrip('s') if len(clean_search) > 3 else clean_search.lower()
 
+        # 1. Try search_menu
         search_res = await client.call_tool("food", "search_menu", {
             "addressId": address["id"],
             "query": search_term,
@@ -489,7 +515,46 @@ async def _add_to_cart(client, router, query, address, tool_logs):
             "result": search_res,
         })
 
-        items_found = search_res.get("data", {}).get("items", []) if search_res.get("success") else []
+        items_found = []
+        if search_res.get("success") and isinstance(search_res.get("data"), dict):
+            items_found = search_res["data"].get("items", [])
+
+        # 2. If search_menu returned nothing, try search_restaurants
+        if not items_found:
+            rest_search = await client.call_tool("food", "search_restaurants", {
+                "addressId": address["id"],
+                "query": search_term,
+            })
+            tool_logs.append({
+                "tool": "search_restaurants",
+                "args": {"addressId": address["id"], "query": search_term},
+                "result": rest_search,
+            })
+            if rest_search.get("success") and isinstance(rest_search.get("data"), dict):
+                dishes = rest_search["data"].get("dishes", [])
+                if dishes:
+                    items_found = dishes
+                elif rest_search["data"].get("restaurants"):
+                    # Check top restaurant's menu
+                    top_r = rest_search["data"]["restaurants"][0]
+                    target_rest_id = top_r.get("id")
+                    target_rest_name = top_r.get("name")
+                    m_res = await client.call_tool("food", "get_restaurant_menu", {
+                        "addressId": address["id"], "restaurantId": target_rest_id
+                    })
+                    tool_logs.append({
+                        "tool": "get_restaurant_menu",
+                        "args": {"addressId": address["id"], "restaurantId": target_rest_id},
+                        "result": m_res,
+                    })
+                    if m_res.get("success") and isinstance(m_res.get("data"), dict):
+                        for cat in m_res["data"].get("categories", []):
+                            if isinstance(cat, dict):
+                                for cat_it in cat.get("items", []):
+                                    if search_term in cat_it.get("name", "").lower():
+                                        cat_it["restaurantId"] = target_rest_id
+                                        cat_it["restaurantName"] = target_rest_name
+                                        items_found.append(cat_it)
 
         if restaurant_name and items_found:
             filtered = [i for i in items_found if restaurant_name.lower() in i.get("restaurantName", "").lower()]
@@ -498,14 +563,14 @@ async def _add_to_cart(client, router, query, address, tool_logs):
 
         if items_found:
             matched = items_found[0]
-            r_id = matched.get("restaurantId") or matched.get("restaurant_id")
-            r_name = matched.get("restaurantName") or matched.get("restaurant_name", "Restaurant")
+            r_id = matched.get("restaurantId") or matched.get("restaurant_id") or target_rest_id
+            r_name = matched.get("restaurantName") or matched.get("restaurant_name") or target_rest_name
             item_id = matched.get("id") or matched.get("menu_item_id")
             if r_id not in matched_items_by_rest:
                 matched_items_by_rest[r_id] = {"rest_name": r_name, "items": []}
             matched_items_by_rest[r_id]["items"].append({
                 "itemId": item_id,
-                "name": matched["name"],
+                "name": matched.get("name", name_str),
                 "quantity": qty,
                 "price": matched.get("price", 0),
             })

@@ -85,9 +85,11 @@ def create_orchestrator(
         llm_client=llm,
     )
 
-    # 6. Router — uses sim_client for handler tool calls (backwards-compatible)
+    # 6. Router — uses correct client based on env_mode
+    active_client = mcp_client if (mcp_client and settings.get("env_mode") == "production") else sim_client
+
     router = OrchestratorRouter(
-        client=sim_client,
+        client=active_client,
         prioritizer=prioritizer,
         llm=llm,
     )
@@ -96,7 +98,7 @@ def create_orchestrator(
     router.mcp_client = mcp_client
 
     # 7. Register Domain Handlers (correct import paths)
-    register_plugins(router, sim_client)
+    register_plugins(router, active_client)
 
     return router
 

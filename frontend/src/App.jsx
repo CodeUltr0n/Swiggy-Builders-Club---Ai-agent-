@@ -31,10 +31,11 @@ export default function App() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const handleSend = async () => {
-    if (!inputValue.trim()) return;
+  const handleSend = async (actionQuery) => {
+    const textToSend = (typeof actionQuery === 'string' ? actionQuery : inputValue).trim();
+    if (!textToSend) return;
     
-    const userMsg = { role: 'user', content: inputValue };
+    const userMsg = { role: 'user', content: textToSend };
     setMessages(prev => [...prev, userMsg]);
     setInputValue('');
     setIsLoading(true);
@@ -43,7 +44,7 @@ export default function App() {
       const response = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: inputValue })
+        body: JSON.stringify({ query: textToSend })
       });
       
       if (!response.ok) {
@@ -139,6 +140,7 @@ export default function App() {
                 key={idx} 
                 msg={msg} 
                 isLatestAgentMsg={msg.role === 'agent' && idx === messages.length - 1} 
+                onAction={handleSend}
               />
             ))}
             

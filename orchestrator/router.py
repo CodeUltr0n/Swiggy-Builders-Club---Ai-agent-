@@ -233,10 +233,45 @@ class OrchestratorRouter:
                 "rankings": rankings,
             }
 
-        addresses = addr_res["data"]
+        raw_data = addr_res["data"]
+        # Normalize: extract an actual list of address dicts
+        if isinstance(raw_data, list):
+            addresses = raw_data
+        elif isinstance(raw_data, dict):
+            # Try nested keys Swiggy may use
+            addresses = raw_data.get("addresses", raw_data.get("data", []))
+            if isinstance(addresses, dict):
+                addresses = [addresses]  # single address wrapped in dict
+            if not isinstance(addresses, list):
+                addresses = [raw_data]  # the dict itself might be a single address
+        elif isinstance(raw_data, str):
+            # Try JSON parse
+            try:
+                import json
+                parsed = json.loads(raw_data)
+                addresses = parsed if isinstance(parsed, list) else [parsed]
+            except Exception:
+                addresses = []
+        else:
+            addresses = []
+
+        logger.info(f"Addresses extracted: {len(addresses)} items, first: {str(addresses[0])[:200] if addresses else 'none'}")
+
+        # Filter to dicts with an id
+        addresses = [a for a in addresses if isinstance(a, dict) and a.get("id")]
+
+        if not addresses:
+            return {
+                "response_text": "Could not find valid addresses in your account. Please add an address on Swiggy.",
+                "tool_calls": tool_logs,
+                "active_server": primary_server,
+                "state": self.current_state,
+                "rankings": rankings,
+            }
+
         selected = next(
-            (a for a in addresses if a["id"] == context.get("address_id")),
-            addresses[0] if addresses else None,
+            (a for a in addresses if a.get("id") == context.get("address_id")),
+            addresses[0],
         )
         context["resolved_address"] = selected
 

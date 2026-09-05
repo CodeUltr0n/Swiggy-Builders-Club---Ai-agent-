@@ -13,6 +13,85 @@ from typing import Dict, Any, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _extract_restaurants(tool_result: dict) -> list:
+    """Safely extract restaurant list from a call_tool result.
+
+    The Swiggy MCP may return data in different shapes:
+    - {"data": {"restaurants": [...]}}
+    - {"data": [...]}  (flat list)
+    - {"data": "json string"}
+    - Other unexpected shapes
+    """
+    if not tool_result.get("success"):
+        return []
+
+    data = tool_result.get("data")
+    if data is None:
+        return []
+
+    # data is already a list — assume it's a list of restaurants
+    if isinstance(data, list):
+        return data
+
+    # data is a dict — try nested keys
+    if isinstance(data, dict):
+        # Standard: {"restaurants": [...]}
+        if "restaurants" in data:
+            return data["restaurants"] if isinstance(data["restaurants"], list) else []
+        # Maybe: {"data": {"restaurants": [...]}}
+        if "data" in data and isinstance(data["data"], dict):
+            return data["data"].get("restaurants", [])
+        # Maybe: {"cards": [...]} or other Swiggy format
+        if "cards" in data:
+            return _extract_from_cards(data["cards"])
+        # Return empty if no recognized keys
+        return []
+
+    # data is a string — try to JSON parse it
+    if isinstance(data, str):
+        try:
+            import json
+            parsed = json.loads(data)
+            return _extract_restaurants({"success": True, "data": parsed})
+        except Exception:
+            return []
+
+    return []
+
+
+def _extract_from_cards(cards: list) -> list:
+    """Extract restaurants from Swiggy's card-based response format."""
+    restaurants = []
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+        # Navigate into card -> card -> info structure
+        info = card.get("card", {}).get("card", {}).get("info", card.get("info", {}))
+        if isinstance(info, dict) and info.get("id"):
+            restaurants.append({
+                "id": info.get("id"),
+                "name": info.get("name", "Unknown"),
+                "cuisine": ", ".join(info.get("cuisines", [])) if isinstance(info.get("cuisines"), list) else info.get("cuisine", ""),
+                "rating": info.get("avgRating", info.get("rating", "N/A")),
+                "distance_km": info.get("sla", {}).get("lastMileTravel", 0) if isinstance(info.get("sla"), dict) else 0,
+            })
+        # Also check for restaurant list inside card gridElements
+        grid = card.get("card", {}).get("card", {}).get("gridElements", {})
+        if isinstance(grid, dict):
+            info_list = grid.get("infoWithStyle", {}).get("restaurants", [])
+            for r_wrapper in info_list:
+                r_info = r_wrapper.get("info", {}) if isinstance(r_wrapper, dict) else {}
+                if r_info.get("id"):
+                    restaurants.append({
+                        "id": r_info.get("id"),
+                        "name": r_info.get("name", "Unknown"),
+                        "cuisine": ", ".join(r_info.get("cuisines", [])) if isinstance(r_info.get("cuisines"), list) else "",
+                        "rating": r_info.get("avgRating", "N/A"),
+                        "distance_km": r_info.get("sla", {}).get("lastMileTravel", 0) if isinstance(r_info.get("sla"), dict) else 0,
+                    })
+    return restaurants
+
+
 def register(router, client):
     """Register food handler with router."""
     handler = create_handler(client, router)
@@ -107,7 +186,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
         "result": rest_res
     })
 
-    restaurants = rest_res.get("data", {}).get("restaurants", []) if rest_res.get("success") else []
+    restaurants = _extract_restaurants(rest_res)
 
     # If specific query returned 0 restaurants, fetch all open restaurants as options
     if not restaurants:
@@ -120,7 +199,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             "result": all_open_res
         })
         if all_open_res.get("success"):
-            restaurants = all_open_res["data"].get("restaurants", [])
+            restaurants = _extract_restaurants(all_open_res)
 
     # If search calls failed entirely (e.g. auth/MCP error), tell the user why
     if not restaurants and not rest_res.get("success"):
@@ -140,16 +219,49 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
     # Fetch menu items for top open restaurants to provide rich LLM context
     restaurant_options = []
     for r in restaurants[:3]:
-        menu_res = await client.call_tool("food", "get_restaurant_menu", {"restaurantId": r["id"]})
-        tool_logs.append({"tool": "get_restaurant_menu", "args": {"restaurantId": r["id"]}, "result": menu_res})
-        items = menu_res.get("data", {}).get("items", []) if menu_res.get("success") else []
+        if not isinstance(r, dict):
+            logger.warning(f"Skipping non-dict restaurant entry: {type(r).__name__}")
+            continue
+        r_id = r.get("id")
+        if not r_id:
+            continue
+
+        menu_res = await client.call_tool("food", "get_restaurant_menu", {"restaurantId": r_id})
+        tool_logs.append({"tool": "get_restaurant_menu", "args": {"restaurantId": r_id}, "result": menu_res})
+
+        # Extract menu items — handle multiple formats
+        menu_data = menu_res.get("data", {}) if menu_res.get("success") else {}
+        if isinstance(menu_data, dict):
+            items = menu_data.get("items", menu_data.get("menu", []))
+            if isinstance(items, dict):
+                # Maybe items is nested: {"categories": [...]} or {"items": [...]}
+                items = items.get("items", items.get("categories", []))
+        elif isinstance(menu_data, list):
+            items = menu_data
+        else:
+            items = []
+
+        if not isinstance(items, list):
+            items = []
+
+        # Build menu highlights safely
+        menu_highlights = []
+        for it in items[:4]:
+            if isinstance(it, dict):
+                item_name = it.get("name", it.get("itemName", "Item"))
+                item_price = it.get("price", it.get("defaultPrice", it.get("finalPrice", "?")))
+                # Swiggy sometimes returns price in paise (divide by 100)
+                if isinstance(item_price, (int, float)) and item_price > 1000:
+                    item_price = item_price / 100
+                menu_highlights.append(f"{item_name} (Rs.{item_price})")
+
         restaurant_options.append({
-            "id": r["id"],
-            "name": r["name"],
-            "cuisine": r["cuisine"],
-            "rating": r["rating"],
-            "distance_km": r["distance_km"],
-            "menu_highlights": [f"{it['name']} (Rs.{it['price']})" for it in items[:4]]
+            "id": r_id,
+            "name": r.get("name", "Unknown Restaurant"),
+            "cuisine": r.get("cuisine", ", ".join(r.get("cuisines", [])) if isinstance(r.get("cuisines"), list) else ""),
+            "rating": r.get("rating", r.get("avgRating", "N/A")),
+            "distance_km": r.get("distance_km", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0),
+            "menu_highlights": menu_highlights,
         })
 
     if restaurant_options:

@@ -63,14 +63,23 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
     products = []
     for term in sub_terms:
         prod_res = await client.call_tool("instamart", "search_products", {
-            "addressId": address["id"], "query": term
+            "addressId": address.get("id", ""), "query": term
         })
-        tool_logs.append({"tool": "search_products", "args": {"addressId": address["id"], "query": term}, "result": prod_res})
-        if prod_res.get("success") and prod_res.get("data", {}).get("products"):
-            for p in prod_res["data"]["products"]:
-                if p["id"] not in seen_ids:
-                    seen_ids.add(p["id"])
-                    products.append(p)
+        tool_logs.append({"tool": "search_products", "args": {"addressId": address.get("id", ""), "query": term}, "result": prod_res})
+        if prod_res.get("success"):
+            prod_data = prod_res.get("data", {})
+            # Handle different formats
+            if isinstance(prod_data, dict):
+                prod_list = prod_data.get("products", prod_data.get("data", []))
+            elif isinstance(prod_data, list):
+                prod_list = prod_data
+            else:
+                prod_list = []
+            if isinstance(prod_list, list):
+                for p in prod_list:
+                    if isinstance(p, dict) and p.get("id") and p["id"] not in seen_ids:
+                        seen_ids.add(p["id"])
+                        products.append(p)
 
     # LLM Dynamic Reasoning & Response Generation
     if router.llm and router.llm.api_key:

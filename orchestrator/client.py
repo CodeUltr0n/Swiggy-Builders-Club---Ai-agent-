@@ -466,8 +466,12 @@ class MCPClient:
                 "arguments": arguments,
             })
 
-            content = result.get("content", [])
+            logger.info(f"MCP [{server_name}] Raw result type: {type(result).__name__}, keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+
+            content = result.get("content", []) if isinstance(result, dict) else result
             parsed_data = self._parse_mcp_content(content)
+
+            logger.info(f"MCP [{server_name}] Parsed data type: {type(parsed_data).__name__}, preview: {str(parsed_data)[:300]}")
 
             return {"success": True, "data": parsed_data, "raw_content": content, "tool_name": tool_name, "server": server_name}
 
@@ -501,19 +505,54 @@ class MCPClient:
         logger.info(f"Session reset: {server_name or 'all servers'}")
 
     @staticmethod
-    def _parse_mcp_content(content: list) -> Any:
-        """Parse MCP content array [{"type": "text", "text": "..."}] into usable data."""
-        if not content:
+    def _parse_mcp_content(content) -> Any:
+        """Parse MCP content into usable data.
+
+        Handles multiple formats:
+        - list of {"type": "text", "text": "..."} dicts (standard MCP)
+        - list of plain strings
+        - a single string
+        - a dict (already parsed)
+        """
+        if content is None:
             return {}
 
-        text_parts = [item.get("text", "") for item in content if item.get("type") == "text"]
-        combined = "\n".join(text_parts)
+        # Already a dict — return as-is
+        if isinstance(content, dict):
+            return content
 
-        try:
-            import json as _json
-            return _json.loads(combined)
-        except (json_module_error := Exception):
-            pass
+        # Single string — try JSON parse
+        if isinstance(content, str):
+            try:
+                import json as _json
+                return _json.loads(content)
+            except Exception:
+                return content
 
-        return text_parts[0] if len(text_parts) == 1 else combined
+        # List
+        if isinstance(content, list):
+            if not content:
+                return {}
+
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    text_parts.append(item.get("text", str(item)))
+                elif isinstance(item, str):
+                    text_parts.append(item)
+                else:
+                    text_parts.append(str(item))
+
+            combined = "\n".join(text_parts)
+
+            try:
+                import json as _json
+                return _json.loads(combined)
+            except Exception:
+                pass
+
+            return text_parts[0] if len(text_parts) == 1 else combined
+
+        # Fallback
+        return content
 

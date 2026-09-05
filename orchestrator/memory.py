@@ -56,6 +56,9 @@ class MemoryManager:
             if cursor.fetchone()[0] == 0:
                 self.seed_default_data()
 
+            # Clean up abandoned data periodically (on initialization)
+            self.purge_abandoned_orders()
+
     def seed_default_data(self):
         default_addresses = [
             ("addr_home_001", "Home", "Flat 402, Signature Residency, Indiranagar, Bengaluru", 12.9716, 77.5946),
@@ -154,6 +157,18 @@ class MemoryManager:
                     "timestamp": row[6]
                 } for row in rows
             ]
+
+    def purge_abandoned_orders(self):
+        """Purge abandoned or failed orders to comply with Swiggy Integration Agreement Section 3.3(i)(b)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Delete orders that are not DELIVERED or CONFIRMED or PLACED and are older than 2 hours
+            cursor.execute("""
+                DELETE FROM orders 
+                WHERE status NOT IN ('DELIVERED', 'CONFIRMED', 'PLACED') 
+                AND timestamp <= datetime('now', '-2 hours')
+            """)
+            conn.commit()
 
     # Preference operations
 

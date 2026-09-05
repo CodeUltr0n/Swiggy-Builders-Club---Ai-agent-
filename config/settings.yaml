@@ -1,6 +1,6 @@
 settings:
   # Mode can be: simulation, staging, production
-  env_mode: "simulation"
+  env_mode: "production"
   
   # SQLite Database Path
   database_path: "orchestrator.db"

@@ -52,7 +52,15 @@ export default function Message({ msg, isLatestAgentMsg }) {
                   <span className="card-rating">★ {rest.rating || '4.5'}</span>
                   {rest.distance_km && <span>{rest.distance_km} km</span>}
                 </div>
-                <div className="card-action">View Details</div>
+                {rest.url ? (
+                  <a href={rest.url} target="_blank" rel="noopener noreferrer" className="card-action" style={{ display: 'block', textDecoration: 'none' }}>
+                    View Details
+                  </a>
+                ) : (
+                  <div className="card-action" onClick={() => alert("No URL provided for this restaurant.")}>
+                    View Details
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -473,6 +473,14 @@ class MCPClient:
 
             logger.info(f"MCP [{server_name}] Parsed data type: {type(parsed_data).__name__}, preview: {str(parsed_data)[:300]}")
 
+            # If the parsed data is itself a Swiggy {success, data} envelope, return it directly
+            # Otherwise wrap it in our standard format
+            if isinstance(parsed_data, dict) and "success" in parsed_data:
+                parsed_data["tool_name"] = tool_name
+                parsed_data["server"] = server_name
+                parsed_data["raw_content"] = content
+                return parsed_data
+
             return {"success": True, "data": parsed_data, "raw_content": content, "tool_name": tool_name, "server": server_name}
 
         except MCPError as e:

@@ -239,9 +239,9 @@ class MCPClient:
     """
 
     DEFAULT_SERVERS = {
-        "food": "https://mcp.swiggy.com/servers/food",
-        "instamart": "https://mcp.swiggy.com/servers/instamart",
-        "dineout": "https://mcp.swiggy.com/servers/dineout",
+        "food": "https://mcp.swiggy.com/food",
+        "instamart": "https://mcp.swiggy.com/im",
+        "dineout": "https://mcp.swiggy.com/dineout",
     }
 
     _request_id = 0

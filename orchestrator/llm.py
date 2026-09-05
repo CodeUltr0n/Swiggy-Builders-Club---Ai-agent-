@@ -76,8 +76,17 @@ class LLMClient:
 
         if not system_prompt:
             system_prompt = (
-                "You are an intent classifier for a food/grocery/reservation orchestrator. "
-                "Analyze the user's query and classify it into exactly one of the provided options. "
+                "You are an intent classifier for Swiggy's multi-service platform. "
+                "Classify the user's query into exactly ONE option.\n\n"
+                "SERVICE DEFINITIONS:\n"
+                "- food: Ordering PREPARED meals, dishes, desserts, sweets, cakes, ice cream, or any cooked/ready-to-eat items from RESTAURANTS. "
+                "  Examples: 'something sweet', 'biryani', 'pizza', 'cake', 'dessert', 'ice cream', 'hungry', 'want to eat', 'lunch', 'dinner'.\n"
+                "- instamart: Buying RAW INGREDIENTS, packaged goods, household essentials from a GROCERY store. "
+                "  Examples: 'milk', 'eggs', 'sugar', 'detergent', 'vegetables', 'atta', 'cooking oil'.\n"
+                "- dineout: RESERVING a TABLE at a restaurant to eat there in person. "
+                "  Examples: 'book a table', 'restaurant reservation', 'dine out tonight', 'fine dining'.\n\n"
+                "IMPORTANT: If the user wants to EAT something (sweet, spicy, etc.), classify as 'food'. "
+                "Only classify as 'instamart' if they want to BUY raw/packaged grocery items.\n\n"
                 "Return ONLY valid JSON: {\"label\": \"<option>\", \"reasoning\": \"<why>\", \"confidence\": <0.0-1.0>}. "
                 "No markdown, no explanation, just JSON."
             )

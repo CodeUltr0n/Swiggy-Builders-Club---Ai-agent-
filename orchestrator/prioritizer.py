@@ -141,7 +141,7 @@ class ContextPrioritizer:
         query_lower = query.lower()
 
         # Food cooked meals keywords
-        food_kw = ["biryani", "burger", "pizza", "hungry", "order food", "restaurant", "menu", "takeout", "swiggy food"]
+        food_kw = ["biryani", "burger", "pizza", "hungry", "order food", "restaurant", "menu", "takeout", "swiggy food", "sweet", "dessert", "cake", "ice cream", "gulab jamun", "rasgulla", "pastry", "brownie", "milkshake", "kulfi", "mithai", "jalebi"]
         # Instamart grocery & raw ingredients keywords
         im_kw = ["milk", "egg", "eggs", "bread", "butter", "cheese", "groceries", "grocery", "tomato", "onion", "vegetables", "fruits", "chips", "coke", "ghee", "detergent", "soap", "curd", "paneer", "atta", "rice", "oil", "sugar", "salt", "tea", "coffee", "biscuits", "biscuit", "snacks"]
         # Dineout table reservation keywords

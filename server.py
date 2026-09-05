@@ -13,6 +13,7 @@ Deploy to Render/any host. OAuth callback must be whitelisted by Swiggy.
 import os
 import logging
 from html import escape as html_escape
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -26,7 +27,18 @@ from orchestrator.init_orchestrator import create_orchestrator
 REDIRECT_URI = os.getenv("SWIGGY_REDIRECT_URI", "https://swiggy-builders-club-ai-agent.onrender.com/oauth/callback")
 CLIENT_NAME = os.getenv("SWIGGY_CLIENT_NAME", "MCP Orchestrator")
 
-app = FastAPI(title="Swiggy MCP Orchestrator")
+@asynccontextmanager
+async def lifespan(app):
+    # Startup — nothing extra needed (services init at module level)
+    yield
+    # Shutdown — close MCP connections
+    if orchestrator:
+        mcp_client = getattr(orchestrator, 'mcp_client', None)
+        if mcp_client:
+            await mcp_client.close()
+    logger.info("Orchestrator shutdown complete")
+
+app = FastAPI(title="Swiggy MCP Orchestrator", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 # --- Core services ---
@@ -303,7 +315,9 @@ async def chat(request: Request):
         }
 
     except Exception as e:
-        logger.error(f"Orchestrator error: {e}", exc_info=True)
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(f"Orchestrator error: {tb}")
         return JSONResponse(
             {"error": f"Processing failed: {e}", "query": query},
             status_code=500,
@@ -328,17 +342,6 @@ async def mcp_status():
     }
 
 
-# ============================================================
-#  Shutdown
-# ============================================================
-
-@app.on_event("shutdown")
-async def shutdown():
-    if orchestrator:
-        mcp_client = getattr(orchestrator, 'mcp_client', None)
-        if mcp_client:
-            await mcp_client.close()
-    logger.info("Orchestrator shutdown complete")
 
 
 # ============================================================

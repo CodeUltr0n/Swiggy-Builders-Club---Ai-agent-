@@ -33,12 +33,12 @@ class LLMClient:
 
     def _default_model(self, provider_name: str) -> str:
         if provider_name == "groq":
-            return os.getenv("GROQ_MODEL", "qwen-3.6-27b")
+            return os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
         elif provider_name in ("gemini", "google"):
             return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         elif provider_name in ("xai", "grok"):
             return os.getenv("GROK_MODEL", "grok-3-mini")
-        return "qwen-3.6-27b"
+        return "qwen/qwen3.6-27b"
 
     def _default_api_key(self, provider_name: str) -> str:
         if provider_name == "groq":

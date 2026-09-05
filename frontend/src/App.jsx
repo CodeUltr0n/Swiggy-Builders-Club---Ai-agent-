@@ -47,7 +47,12 @@ export default function App() {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        const errorData = await response.json().catch(() => null);
+        if (response.status === 401) {
+          setIsAuthenticated(false);
+          throw new Error('Session expired. Please re-authenticate.');
+        }
+        throw new Error(errorData?.error || 'Failed to send message');
       }
       
       const data = await response.json();
@@ -63,7 +68,7 @@ export default function App() {
       setMessages(prev => [...prev, agentMsg]);
     } catch (error) {
       console.error(error);
-      const errorMsg = { role: 'agent', content: 'Sorry, there was an error processing your request.' };
+      const errorMsg = { role: 'agent', content: `⚠️ ${error.message || 'Sorry, there was an error processing your request.'}` };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);

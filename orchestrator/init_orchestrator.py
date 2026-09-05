@@ -85,20 +85,19 @@ def create_orchestrator(
         llm_client=llm,
     )
 
-    # 6. Router — uses correct client based on env_mode
-    active_client = mcp_client if (mcp_client and settings.get("env_mode") == "production") else sim_client
-
+    # 6. Router — uses the Hybrid Client (sim_client) which delegates to real or local
     router = OrchestratorRouter(
-        client=active_client,
+        client=sim_client,
         prioritizer=prioritizer,
         llm=llm,
     )
 
-    # Attach the real MCP client for server.py to use
+    # Attach the real MCP client so the Hybrid Client can proxy remote calls to it
+    sim_client.real_mcp_client = mcp_client
     router.mcp_client = mcp_client
 
     # 7. Register Domain Handlers (correct import paths)
-    register_plugins(router, active_client)
+    register_plugins(router, sim_client)
 
     return router
 

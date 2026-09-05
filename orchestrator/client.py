@@ -96,10 +96,9 @@ class SwiggyMCPClient:
         if not plugin:
             return {"success": False, "error": f"Server plugin '{server_name}' not registered"}
 
-        if self.env_mode == "simulation":
-            return await plugin.execute_tool(tool_name, arguments, "simulation")
-        else:
-            return await self.call_real_server(server_name, tool_name, arguments)
+        # Always route through the plugin so local tools (SQLite) can be intercepted
+        real_client = getattr(self, "real_mcp_client", None)
+        return await plugin.execute_tool(tool_name, arguments, self.env_mode, real_client)
 
     async def call_real_server(self, server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """

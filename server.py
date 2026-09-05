@@ -195,6 +195,12 @@ async def oauth_callback(request: Request):
                             Token expires in <b>{int(expires_in) // 3600} hours</b>.<br>
                             Scope: <code>{html_escape(scope)}</code>
                         </p>
+                        <p style="color: #718096;">Redirecting back to the chat interface...</p>
+                        <script>
+                            setTimeout(() => {{
+                                window.location.href = '/';
+                            }}, 1500);
+                        </script>
                         <div style="margin-top: 20px; padding: 12px; background: #edf2f7; border-radius: 8px;">
                             <p style="color: #4a5568; font-size: 14px;">You can now close this tab. The orchestrator is ready to accept queries.</p>
                         </div>

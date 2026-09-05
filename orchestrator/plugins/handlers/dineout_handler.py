@@ -83,16 +83,54 @@ def _extract_dineout_restaurants(tool_result: dict) -> list:
         lines = data.split("\n")
         parsed_from_text = []
         for line in lines:
-            m_line = re.search(r'(?:^\d+\.|\*|\-)\s*\*\*([^*]+)\*\*(.*)', line)
-            if m_line:
-                name = m_line.group(1).strip()
+            # 1. Swiggy Dineout text format: "1. Pakwan - Royal Vegetarian Dining —  | 4.2★ |  | Indiranagar (ID: 803908)"
+            m = re.search(r'^\s*\d+\.\s*(.+?)\s*—\s*(.*?)\(ID:\s*(\d+)\)', line)
+            if m:
+                name = m.group(1).strip()
+                meta = m.group(2)
+                r_id = m.group(3).strip()
+                r_match = re.search(r'([0-9.]+)\s*★', meta)
+                rating = r_match.group(1) if r_match else "4.2"
+                parts = [p.strip() for p in meta.split('|') if p.strip() and '★' not in p]
+                locality = parts[-1] if parts else "Bengaluru"
+                cuisine = parts[0] if len(parts) > 1 else "Dining"
+                parsed_from_text.append({
+                    "id": r_id,
+                    "name": name,
+                    "rating": rating,
+                    "locality": locality,
+                    "cuisine": f"{cuisine}, {locality}" if locality else cuisine,
+                    "avg_cost_for_two": "₹1,200",
+                    "has_deals": True
+                })
+                continue
+
+            # 2. Fallback without em-dash
+            m2 = re.search(r'^\s*\d+\.\s*(.+?)\s*\(ID:\s*(\d+)\)', line)
+            if m2:
+                parsed_from_text.append({
+                    "id": m2.group(2).strip(),
+                    "name": m2.group(1).strip(),
+                    "rating": "4.2",
+                    "cuisine": "Dining",
+                    "avg_cost_for_two": "₹1,200",
+                    "has_deals": True
+                })
+                continue
+
+            # 3. Fallback bold markdown
+            m_bold = re.search(r'(?:^\d+\.|\*|\-)\s*\*\*([^*]+)\*\*(.*)', line)
+            if m_bold:
+                name = m_bold.group(1).strip()
                 parsed_from_text.append({
                     "id": f"dine_{len(parsed_from_text)+1}",
                     "name": name,
                     "cuisine": "Dining",
                     "rating": "4.2",
                     "avg_cost_for_two": "₹1,200",
+                    "has_deals": True
                 })
+
         if parsed_from_text:
             return parsed_from_text
 

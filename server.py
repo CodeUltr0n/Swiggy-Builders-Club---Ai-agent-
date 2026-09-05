@@ -22,7 +22,7 @@ from orchestrator.oauth import SwiggyOAuthClient, verify_callback_params
 from orchestrator.init_orchestrator import create_orchestrator
 
 # --- Config from env ---
-REDIRECT_URI = os.getenv("SWIGGY_REDIRECT_URI", "http://localhost:8000/oauth/callback")
+REDIRECT_URI = os.getenv("SWIGGY_REDIRECT_URI", "https://swiggy-builders-club-ai-agent.onrender.com/oauth/callback")
 CLIENT_NAME = os.getenv("SWIGGY_CLIENT_NAME", "MCP Orchestrator")
 
 app = FastAPI(title="Swiggy MCP Orchestrator")

@@ -49,7 +49,7 @@ class SwiggyOAuthClient:
 
     Usage:
         oauth = SwiggyOAuthClient(
-            redirect_uri="https://your-app.onrender.com/oauth/callback",
+            redirect_uri="https://swiggy-builders-club-ai-agent.onrender.com/oauth/callback",
             client_name="MCP Orchestrator",
         )
 

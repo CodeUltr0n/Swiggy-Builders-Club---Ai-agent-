@@ -100,6 +100,126 @@ async def health():
 
 
 # ============================================================
+#  Debug / Diagnostics
+# ============================================================
+
+@app.get("/debug/mcp-raw")
+async def debug_mcp_raw():
+    """Diagnostic: makes a raw HTTP call to Swiggy MCP /food and returns the full response."""
+    import httpx
+    import json
+
+    if not oauth_client.is_authenticated():
+        return JSONResponse({"error": "Not authenticated. Go to /auth/start first."}, status_code=401)
+
+    try:
+        auth_headers = oauth_client.get_auth_headers()
+    except Exception as e:
+        return JSONResponse({"error": f"Token error: {e}"}, status_code=401)
+
+    results = {}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Step 1: Initialize the MCP session
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {"client": {"tools": {}, "resources": {}}},
+                "clientInfo": {"name": "Swiggy MCP Orchestrator Debug", "version": "1.0.0"},
+            },
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            **auth_headers,
+        }
+
+        init_resp = await client.post("https://mcp.swiggy.com/food", json=init_payload, headers=headers)
+        results["1_init"] = {
+            "status": init_resp.status_code,
+            "content_type": init_resp.headers.get("content-type"),
+            "session_id": init_resp.headers.get("mcp-session-id"),
+            "body_preview": init_resp.text[:2000],
+        }
+
+        session_id = init_resp.headers.get("mcp-session-id")
+
+        # Step 2: Send initialized notification
+        notif_payload = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+        notif_headers = {**headers}
+        if session_id:
+            notif_headers["Mcp-Session-Id"] = session_id
+        notif_resp = await client.post("https://mcp.swiggy.com/food", json=notif_payload, headers=notif_headers)
+        results["2_notification"] = {
+            "status": notif_resp.status_code,
+            "body_preview": notif_resp.text[:500],
+        }
+
+        # Step 3: Call get_addresses
+        addr_payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "get_addresses", "arguments": {}},
+        }
+        addr_headers = {**headers}
+        if session_id:
+            addr_headers["Mcp-Session-Id"] = session_id
+        addr_resp = await client.post("https://mcp.swiggy.com/food", json=addr_payload, headers=addr_headers)
+
+        addr_body = addr_resp.text[:3000]
+        results["3_get_addresses"] = {
+            "status": addr_resp.status_code,
+            "content_type": addr_resp.headers.get("content-type"),
+            "body_preview": addr_body,
+        }
+
+        # Try to parse address ID for search_restaurants
+        address_id = None
+        try:
+            addr_data = addr_resp.json()
+            content = addr_data.get("result", {}).get("content", [])
+            if content and isinstance(content, list):
+                text_content = content[0].get("text", "") if isinstance(content[0], dict) else str(content[0])
+                parsed = json.loads(text_content)
+                if isinstance(parsed, dict) and parsed.get("data"):
+                    addr_list = parsed["data"]
+                    if isinstance(addr_list, list) and addr_list:
+                        address_id = addr_list[0].get("id")
+                    elif isinstance(addr_list, dict) and addr_list.get("addresses"):
+                        address_id = addr_list["addresses"][0].get("id")
+            results["3_parsed_address_id"] = address_id
+        except Exception as e:
+            results["3_parse_error"] = str(e)
+
+        # Step 4: Call search_restaurants
+        if address_id:
+            search_payload = {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_restaurants",
+                    "arguments": {"addressId": address_id, "query": "sweets"},
+                },
+            }
+            search_headers = {**headers}
+            if session_id:
+                search_headers["Mcp-Session-Id"] = session_id
+            search_resp = await client.post("https://mcp.swiggy.com/food", json=search_payload, headers=search_headers)
+            results["4_search_restaurants"] = {
+                "status": search_resp.status_code,
+                "content_type": search_resp.headers.get("content-type"),
+                "body_preview": search_resp.text[:5000],
+            }
+
+    return JSONResponse(results)
+
+
+# ============================================================
 #  OAuth Flow
 # ============================================================
 

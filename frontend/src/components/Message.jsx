@@ -70,6 +70,37 @@ export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }
     }
   }
 
+  // Segmented Tab Management: strictly ONE card section at a time fulfilling MCP Orchestration Motto
+  const hasDishes = dishes.length > 0;
+  const hasRestaurants = restaurants.length > 0;
+  const hasProducts = products.length > 0;
+  const hasAnyCards = hasDishes || hasRestaurants || hasProducts;
+
+  // Default priority: Dishes > Restaurants > Products (unless dineout, then Restaurants)
+  const defaultTab = isDineoutServer && hasRestaurants ? 'restaurants' : (hasDishes ? 'dishes' : (hasRestaurants ? 'restaurants' : 'products'));
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [selectedRestFilter, setSelectedRestFilter] = useState(null);
+
+  // Resolved current tab ensuring we don't display an empty tab
+  let currentTab = activeTab;
+  if (currentTab === 'dishes' && !hasDishes) {
+    currentTab = hasRestaurants ? 'restaurants' : (hasProducts ? 'products' : null);
+  } else if (currentTab === 'restaurants' && !hasRestaurants) {
+    currentTab = hasDishes ? 'dishes' : (hasProducts ? 'products' : null);
+  } else if (currentTab === 'products' && !hasProducts) {
+    currentTab = hasDishes ? 'dishes' : (hasRestaurants ? 'restaurants' : null);
+  }
+
+  // Extract unique restaurant names from dishes for filter pills
+  const dishRestaurantNames = Array.from(
+    new Set(dishes.map(d => d.restaurantName).filter(Boolean))
+  );
+
+  // Filtered dishes based on restaurant selection
+  const displayedDishes = selectedRestFilter 
+    ? dishes.filter(d => d.restaurantName === selectedRestFilter)
+    : dishes;
+
   // Detect confirmation state to show interactive [Confirm] / [Cancel] buttons
   const isConfirmPrompt = isAgent && isLatestAgentMsg && (
     msg.content.includes('(yes/no)') ||
@@ -123,227 +154,292 @@ export default function Message({ msg, isLatestAgentMsg, onAction, onAddToCart }
           </div>
         )}
 
-        {/* Real Food Dishes Carousel */}
-        {dishes.length > 0 && (
-          <div className="dishes-section-wrap">
-            <div className="section-label-bar">
-              <span className="section-label-title">
-                Recommended Dishes ({dishes.length})
-              </span>
-              <span className="section-label-sub">Real Swiggy Menu • Instant Add to Cart</span>
-            </div>
+        {/* Single Unified Interactive Card Deck (Fulfilling MCP Orchestration Motto) */}
+        {hasAnyCards && (
+          <div className="unified-card-deck">
+            {/* Tab Header if multiple entity types exist */}
+            {( (hasDishes && hasRestaurants) || (hasDishes && hasProducts) || (hasRestaurants && hasProducts) ) && (
+              <div className="deck-header-bar">
+                <div className="deck-tabs-pills">
+                  {hasDishes && (
+                    <button 
+                      className={`deck-tab-pill ${currentTab === 'dishes' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('dishes')}
+                    >
+                      <Utensils size={13} />
+                      <span>Dishes ({dishes.length})</span>
+                    </button>
+                  )}
+                  {hasRestaurants && (
+                    <button 
+                      className={`deck-tab-pill ${currentTab === 'restaurants' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('restaurants')}
+                    >
+                      <ShoppingBag size={13} />
+                      <span>Restaurants ({restaurants.length})</span>
+                    </button>
+                  )}
+                  {hasProducts && (
+                    <button 
+                      className={`deck-tab-pill ${currentTab === 'products' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('products')}
+                    >
+                      <span>Instamart ({products.length})</span>
+                    </button>
+                  )}
+                </div>
 
-            <div className="cards-carousel dishes-carousel">
-              {dishes.map((dish, idx) => (
-                <div 
-                  key={dish.id || idx} 
-                  className="dish-card"
-                  onClick={() => {
-                    setActiveModalItem(dish);
-                    setModalType('dish');
-                  }}
-                >
-                  <div className="dish-card-image-wrap">
-                    {dish.imageUrl ? (
-                      <img 
-                        src={dish.imageUrl} 
-                        alt={dish.name} 
-                        className="dish-card-img"
-                        onError={(e) => { e.target.style.display = 'none'; }}
-                      />
-                    ) : (
-                      <div className="dish-img-placeholder">
-                        <Utensils size={24} color="var(--orange-primary)" />
-                      </div>
-                    )}
-                    {dish.isBestseller && <span className="dish-bestseller-tag">⭐ Bestseller</span>}
-                  </div>
+                <span className="deck-subtitle-hint">
+                  {currentTab === 'dishes' && 'Real Swiggy Menu • Instant Add to Cart'}
+                  {currentTab === 'restaurants' && (isDineoutServer ? 'Reserve Tables' : 'Delivering Near You')}
+                  {currentTab === 'products' && 'Instant Grocery Delivery'}
+                </span>
+              </div>
+            )}
 
-                  <div className="dish-card-body">
-                    <div className="dish-veg-row">
-                      <div className={`veg-indicator ${dish.isVeg ? 'veg' : 'non-veg'}`}>
-                        <span className="veg-dot"></span>
-                      </div>
-                      {dish.rating && (
-                        <span className="dish-rating-badge">★ {dish.rating}</span>
+            {/* Restaurant Filter Chips when viewing dishes from multiple restaurants */}
+            {currentTab === 'dishes' && dishRestaurantNames.length > 1 && (
+              <div className="deck-filter-row">
+                <span className="deck-filter-label">Filter:</span>
+                <div className="deck-filter-chips">
+                  <button 
+                    className={`filter-chip ${selectedRestFilter === null ? 'active' : ''}`}
+                    onClick={() => setSelectedRestFilter(null)}
+                  >
+                    All ({dishes.length})
+                  </button>
+                  {dishRestaurantNames.map(rName => (
+                    <button 
+                      key={rName}
+                      className={`filter-chip ${selectedRestFilter === rName ? 'active' : ''}`}
+                      onClick={() => setSelectedRestFilter(selectedRestFilter === rName ? null : rName)}
+                    >
+                      {rName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 1: Dishes Carousel */}
+            {currentTab === 'dishes' && displayedDishes.length > 0 && (
+              <div className="cards-carousel dishes-carousel">
+                {displayedDishes.map((dish, idx) => (
+                  <div 
+                    key={dish.id || idx} 
+                    className="dish-card"
+                    onClick={() => {
+                      setActiveModalItem(dish);
+                      setModalType('dish');
+                    }}
+                  >
+                    <div className="dish-card-image-wrap">
+                      {dish.imageUrl ? (
+                        <img 
+                          src={dish.imageUrl} 
+                          alt={dish.name} 
+                          className="dish-card-img"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="dish-img-placeholder">
+                          <Utensils size={24} color="var(--orange-primary)" />
+                        </div>
                       )}
+                      {dish.isBestseller && <span className="dish-bestseller-tag">⭐ Bestseller</span>}
                     </div>
 
-                    <h4 className="dish-title">{dish.name}</h4>
-                    {dish.restaurantName && (
-                      <span className="dish-rest-sub">{dish.restaurantName}</span>
-                    )}
+                    <div className="dish-card-body">
+                      <div className="dish-veg-row">
+                        <div className={`veg-indicator ${dish.isVeg ? 'veg' : 'non-veg'}`}>
+                          <span className="veg-dot"></span>
+                        </div>
+                        {dish.rating && (
+                          <span className="dish-rating-badge">★ {dish.rating}</span>
+                        )}
+                      </div>
 
-                    <div className="dish-bottom-row">
-                      <span className="dish-price">₹{dish.price}</span>
+                      <h4 className="dish-title">{dish.name}</h4>
+                      {dish.restaurantName && (
+                        <span className="dish-rest-sub">{dish.restaurantName}</span>
+                      )}
+
+                      <div className="dish-bottom-row">
+                        <span className="dish-price">₹{dish.price}</span>
+                        <button 
+                          className="dish-add-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onAddToCart) {
+                              onAddToCart(dish, dish.restaurantName);
+                            } else {
+                              onAction && onAction(`add 1 ${dish.name}`);
+                            }
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>ADD</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tab 2: Restaurants Carousel */}
+            {currentTab === 'restaurants' && restaurants.length > 0 && (
+              <div className="cards-carousel">
+                {restaurants.map((rest, idx) => {
+                  const cuisineStr = Array.isArray(rest.cuisines) 
+                    ? rest.cuisines.slice(0, 3).join(', ') 
+                    : (rest.cuisine || rest.category || 'Restaurant');
+                  const rating = rest.avgRating || rest.rating || '4.2';
+                  const dist = rest.distanceKm ? `${rest.distanceKm} km` : (rest.distance_km ? `${rest.distance_km} km` : '');
+                  const cost = rest.costForTwo || rest.costForTwoMessage || rest.avg_cost_for_two || '';
+
+                  return (
+                    <div key={idx} className="entity-card" onClick={() => {
+                      setActiveModalItem(rest);
+                      setModalType(isDineoutServer ? 'dineout' : 'food');
+                    }}>
+                      {rest.imageUrl && (
+                        <img 
+                          src={rest.imageUrl} 
+                          alt={rest.name} 
+                          className="card-image"
+                          onError={(e) => { e.target.style.display = 'none'; }} 
+                        />
+                      )}
+                      {rest.offer && <div className="card-badge">{rest.offer}</div>}
+                      <div className="card-title">{rest.name}</div>
+                      <div className="card-subtitle">{cuisineStr}</div>
+                      <div className="card-meta">
+                        <span className="card-rating">★ {rating}</span>
+                        {dist && <span>{dist}</span>}
+                        {cost && <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{cost}</span>}
+                      </div>
+
+                      {/* Interactive Action Buttons on Card */}
+                      <div className="card-actions-row">
+                        {!isDineoutServer ? (
+                          <>
+                            <button 
+                              className="card-btn primary orange"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAction && onAction(`order from ${rest.name}`);
+                              }}
+                            >
+                              <ShoppingBag size={13} /> Order Food
+                            </button>
+                            <button 
+                              className="card-btn secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (hasDishes) {
+                                  setSelectedRestFilter(rest.name);
+                                  setActiveTab('dishes');
+                                } else {
+                                  onAction && onAction(`show menu for ${rest.name}`);
+                                }
+                              }}
+                            >
+                              <Utensils size={13} /> {hasDishes ? 'View Dishes' : 'Menu'}
+                            </button>
+                          </>
+                        ) : (
+                          <button 
+                            className="card-btn primary purple"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAction && onAction(`book a table at ${rest.name} for 2 guests`);
+                            }}
+                          >
+                            <Calendar size={13} /> Book Table
+                          </button>
+                        )}
+                        <button 
+                          className="card-btn icon-only"
+                          title="View Details"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveModalItem(rest);
+                            setModalType(isDineoutServer ? 'dineout' : 'food');
+                          }}
+                        >
+                          <Info size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Tab 3: Instamart Products Carousel */}
+            {currentTab === 'products' && products.length > 0 && (
+              <div className="cards-carousel">
+                {products.map((prod, idx) => (
+                  <div key={idx} className="entity-card" onClick={() => {
+                    setActiveModalItem(prod);
+                    setModalType('product');
+                  }}>
+                    {prod.imageUrl && (
+                      <img 
+                        src={prod.imageUrl} 
+                        alt={prod.name} 
+                        className="card-image"
+                        onError={(e) => { e.target.style.display = 'none'; }} 
+                      />
+                    )}
+                    <div className="card-title" style={{ fontSize: '15px' }}>{prod.name}</div>
+                    <div className="card-subtitle">{prod.brand || prod.category || prod.weight || 'Grocery'}</div>
+                    <div className="card-meta">
+                      <span style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>
+                        ₹{prod.price || prod.finalPrice || '0'}
+                      </span>
+                      {prod.quantity && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{prod.quantity}</span>}
+                    </div>
+
+                    {/* Direct Add to Cart Button */}
+                    <div className="card-actions-row">
                       <button 
-                        className="dish-add-btn"
+                        className="card-btn primary green"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (onAddToCart) {
-                            onAddToCart(dish, dish.restaurantName);
+                            onAddToCart({
+                              id: prod.id || `im_${idx}`,
+                              name: prod.name,
+                              price: prod.price || prod.finalPrice || 0,
+                              imageUrl: prod.imageUrl,
+                              isVeg: true,
+                              type: 'instamart'
+                            }, 'Instamart Store');
                           } else {
-                            onAction && onAction(`add 1 ${dish.name}`);
+                            onAction && onAction(`add 1 ${prod.name}`);
                           }
                         }}
                       >
-                        <Plus size={14} />
-                        <span>ADD</span>
+                        <Plus size={14} /> Add to Cart
+                      </button>
+                      <button 
+                        className="card-btn icon-only"
+                        title="View Details"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveModalItem(prod);
+                          setModalType('product');
+                        }}
+                      >
+                        <Info size={14} />
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Restaurants Carousel (Food & Dineout) */}
-        {restaurants.length > 0 && (
-          <div className="cards-carousel">
-            {restaurants.map((rest, idx) => {
-              const cuisineStr = Array.isArray(rest.cuisines) 
-                ? rest.cuisines.slice(0, 3).join(', ') 
-                : (rest.cuisine || rest.category || 'Restaurant');
-              const rating = rest.avgRating || rest.rating || '4.2';
-              const dist = rest.distanceKm ? `${rest.distanceKm} km` : (rest.distance_km ? `${rest.distance_km} km` : '');
-              const cost = rest.costForTwo || rest.costForTwoMessage || rest.avg_cost_for_two || '';
-
-              return (
-                <div key={idx} className="entity-card" onClick={() => {
-                  setActiveModalItem(rest);
-                  setModalType(isDineoutServer ? 'dineout' : 'food');
-                }}>
-                  {rest.imageUrl && (
-                    <img 
-                      src={rest.imageUrl} 
-                      alt={rest.name} 
-                      className="card-image"
-                      onError={(e) => { e.target.style.display = 'none'; }} 
-                    />
-                  )}
-                  {rest.offer && <div className="card-badge">{rest.offer}</div>}
-                  <div className="card-title">{rest.name}</div>
-                  <div className="card-subtitle">{cuisineStr}</div>
-                  <div className="card-meta">
-                    <span className="card-rating">★ {rating}</span>
-                    {dist && <span>{dist}</span>}
-                    {cost && <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{cost}</span>}
-                  </div>
-
-                  {/* Interactive Action Buttons on Card */}
-                  <div className="card-actions-row">
-                    {!isDineoutServer ? (
-                      <>
-                        <button 
-                          className="card-btn primary orange"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAction && onAction(`order from ${rest.name}`);
-                          }}
-                        >
-                          <ShoppingBag size={13} /> Order Food
-                        </button>
-                        <button 
-                          className="card-btn secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAction && onAction(`show menu for ${rest.name}`);
-                          }}
-                        >
-                          <Utensils size={13} /> Menu
-                        </button>
-                      </>
-                    ) : (
-                      <button 
-                        className="card-btn primary purple"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAction && onAction(`book a table at ${rest.name} for 2 guests`);
-                        }}
-                      >
-                        <Calendar size={13} /> Book Table
-                      </button>
-                    )}
-                    <button 
-                      className="card-btn icon-only"
-                      title="View Details"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveModalItem(rest);
-                        setModalType(isDineoutServer ? 'dineout' : 'food');
-                      }}
-                    >
-                      <Info size={14} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Instamart Products Carousel */}
-        {products.length > 0 && (
-          <div className="cards-carousel">
-            {products.map((prod, idx) => (
-              <div key={idx} className="entity-card" onClick={() => {
-                setActiveModalItem(prod);
-                setModalType('product');
-              }}>
-                {prod.imageUrl && (
-                  <img 
-                    src={prod.imageUrl} 
-                    alt={prod.name} 
-                    className="card-image"
-                    onError={(e) => { e.target.style.display = 'none'; }} 
-                  />
-                )}
-                <div className="card-title" style={{ fontSize: '15px' }}>{prod.name}</div>
-                <div className="card-subtitle">{prod.brand || prod.category || prod.weight || 'Grocery'}</div>
-                <div className="card-meta">
-                  <span style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>
-                    ₹{prod.price || prod.finalPrice || '0'}
-                  </span>
-                  {prod.quantity && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{prod.quantity}</span>}
-                </div>
-
-                {/* Direct Add to Cart Button */}
-                <div className="card-actions-row">
-                  <button 
-                    className="card-btn primary green"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onAddToCart) {
-                        onAddToCart({
-                          id: prod.id || `im_${idx}`,
-                          name: prod.name,
-                          price: prod.price || prod.finalPrice || 0,
-                          imageUrl: prod.imageUrl,
-                          isVeg: true,
-                          type: 'instamart'
-                        }, 'Instamart Store');
-                      } else {
-                        onAction && onAction(`add 1 ${prod.name}`);
-                      }
-                    }}
-                  >
-                    <Plus size={14} /> Add to Cart
-                  </button>
-                  <button 
-                    className="card-btn icon-only"
-                    title="View Details"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveModalItem(prod);
-                      setModalType('product');
-                    }}
-                  >
-                    <Info size={14} />
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

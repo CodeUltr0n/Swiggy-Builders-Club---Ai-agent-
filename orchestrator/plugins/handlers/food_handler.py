@@ -484,7 +484,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 "Analyze their request based on their location, time of day/demand, and the retrieved open restaurants and menus. "
                 "CRITICAL: If the user specifically asked for a dish/cuisine (e.g. 'biryani') and no restaurants were found matching that dish (search_matched is False), "
                 "you MUST clearly and politely state that no restaurants are currently delivering that specific item to their location right now before presenting the other available open restaurants as alternatives. "
-                "Format cleanly using GitHub Markdown with bold restaurant names and prices."
+                "IMPORTANT: A rich interactive widget is displayed below your message with dishes ready to add to cart and restaurant cards. Keep your text concise (1-2 brief paragraphs) with high-signal recommendations. Avoid dumping long repetitive bullet lists of dishes/prices in text."
             )
         )
 
@@ -500,12 +500,15 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
     text = f"**Food Server** (Priority Score: {rankings[0][1]}):\n\n"
     loc_label = address.get('label') or address.get('addressLine') or address.get('city') or 'your location'
     if restaurant_options:
+        num_dishes = len(all_extracted_dishes)
         if not original_matched and fallback_used:
             text += f"⚠️ *No restaurants are currently delivering **{search_query}** to **{loc_label}** right now.*\n\n"
-            text += f"Here are other top open restaurants currently delivering near you:\n\n"
+            text += f"Found **{len(restaurant_options)} top restaurants** delivering nearby with **{num_dishes} dishes** available. Select any item below to add directly to your cart, or switch tabs to browse restaurants:\n\n"
         else:
-            text += f"Open restaurants near **{loc_label}**:\n\n"
-        for i, r in enumerate(restaurant_options):
+            dish_mention = f" with **{num_dishes} dishes** ready to add" if num_dishes > 0 else ""
+            text += f"Found **{len(restaurant_options)} open restaurants** delivering near **{loc_label}**{dish_mention}. Select any item below to add to your cart, or switch tabs to browse restaurant details:\n\n"
+        
+        for r in restaurant_options[:3]:
             meta_parts = []
             if r.get('cuisine'):
                 meta_parts.append(r['cuisine'])
@@ -513,13 +516,9 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 meta_parts.append(f"{r['rating']}★")
             if r.get('distance_km'):
                 meta_parts.append(f"{r['distance_km']} km")
-            meta_str = f" — {', '.join(meta_parts)}" if meta_parts else ""
-            text += f"{i + 1}. **{r['name']}**{meta_str}\n"
-            if r.get("menu_highlights"):
-                text += f"   *Popular items:*\n"
-                for item_str in r["menu_highlights"][:4]:
-                    text += f"   • {item_str}\n"
-            text += "\n"
+            meta_str = f" ({', '.join(meta_parts)})" if meta_parts else ""
+            text += f"• **{r['name']}**{meta_str}\n"
+        text += "\n"
     elif raw_text and ("total\":0" in raw_text or "totalRestaurants\":0" in raw_text or "restaurants\":[]" in raw_text):
         text += f"🌙 **All restaurants delivering to {loc_label} are currently closed for the night.**\n\nNo open restaurants are currently delivering **{search_query}** to this location.\n\nPlease check back during daytime operating hours or switch to another saved delivery address (e.g. Hyderabad or Bengaluru) in the top location selector."
     elif raw_text and len(raw_text.strip()) > 10 and not raw_text.strip().startswith("{"):

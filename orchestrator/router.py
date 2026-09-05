@@ -262,7 +262,16 @@ class OrchestratorRouter:
 
         if not addresses:
             return {
-                "response_text": "Could not find valid addresses in your account. Please add an address on Swiggy.",
+                "response_text": (
+                    "📍 **No delivery address found on your Swiggy account.**\n\n"
+                    "To use this app, you need at least one saved delivery address. Here's how:\n\n"
+                    "1. Open the **Swiggy app** on your phone\n"
+                    "2. Go to **Account → Addresses → Add New Address**\n"
+                    "3. Save your delivery location (Home/Work/Other)\n"
+                    "4. Come back here and try again!\n\n"
+                    "💡 *Once you have a saved address, I can find restaurants, "
+                    "order food, groceries, and book tables near you.*"
+                ),
                 "tool_calls": tool_logs,
                 "active_server": primary_server,
                 "state": self.current_state,

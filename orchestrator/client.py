@@ -468,8 +468,20 @@ class MCPClient:
 
             logger.info(f"MCP [{server_name}] Raw result type: {type(result).__name__}, keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
 
+            # Swiggy MCP returns TWO parts in each response:
+            #   - "content": human-readable text for display
+            #   - "structuredContent": machine-readable data for programmatic use
+            # Prefer structuredContent when available
+            structured = result.get("structuredContent") if isinstance(result, dict) else None
             content = result.get("content", []) if isinstance(result, dict) else result
-            parsed_data = self._parse_mcp_content(content)
+
+            if structured and isinstance(structured, dict):
+                # structuredContent is the real data — use it directly
+                logger.info(f"MCP [{server_name}] Using structuredContent, keys: {list(structured.keys())}")
+                parsed_data = structured
+            else:
+                # Fall back to parsing content text
+                parsed_data = self._parse_mcp_content(content)
 
             logger.info(f"MCP [{server_name}] Parsed data type: {type(parsed_data).__name__}, preview: {str(parsed_data)[:300]}")
 

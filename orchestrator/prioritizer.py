@@ -199,6 +199,8 @@ class ContextPrioritizer:
         self._history_adjustment(scores)
         self._preference_adjustment(scores)
 
+        intent_reasoning = "Scored by contextual signals (time, location, history)"
+
         # Check for order tracking queries: boost the server of the most recent order in memory
         track_kw = ["track", "status", "where is my", "order status", "booking status"]
         if any(kw in query.lower() for kw in track_kw) and hasattr(self.memory, "get_past_orders"):

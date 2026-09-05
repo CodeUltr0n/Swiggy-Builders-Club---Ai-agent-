@@ -109,7 +109,7 @@ class FoodPlugin(BasePlugin):
 
     async def sim_update_food_cart(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         rest_id = arguments.get("restaurantId")
-        items = arguments.get("items", [])
+        items = arguments.get("cartItems") or arguments.get("items") or []
         
         if not rest_id:
             raise ValueError("restaurantId is required")
@@ -131,7 +131,7 @@ class FoodPlugin(BasePlugin):
         subtotal = 0.0
         
         for cart_item in items:
-            item_id = cart_item["itemId"]
+            item_id = cart_item.get("itemId") or cart_item.get("menu_item_id")
             quantity = cart_item["quantity"]
             if item_id not in menu_items:
                 raise ValueError(f"Item ID {item_id} not found in this restaurant's menu")

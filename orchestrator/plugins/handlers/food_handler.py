@@ -17,44 +17,107 @@ def _extract_restaurants(tool_result: dict) -> list:
     """Safely extract restaurant list from a call_tool result.
 
     The Swiggy MCP may return data in different shapes:
+    - structuredContent: {"restaurants": [...], "dishes": [...]}
     - {"data": {"restaurants": [...]}}
     - {"data": [...]}  (flat list)
-    - {"data": "json string"}
-    - Other unexpected shapes
+    - {"dishes": [...]} -> extracted to restaurant entries
+    - {"data": "json string" or markdown text}
     """
     if not tool_result.get("success"):
         return []
+
+    # Check structured content first if present
+    structured = tool_result.get("structured")
+    if isinstance(structured, dict):
+        if "restaurants" in structured and isinstance(structured["restaurants"], list) and structured["restaurants"]:
+            return structured["restaurants"]
+        if "data" in structured and isinstance(structured["data"], dict) and "restaurants" in structured["data"]:
+            return structured["data"]["restaurants"]
 
     data = tool_result.get("data")
     if data is None:
         return []
 
-    # data is already a list — assume it's a list of restaurants
+    # data is already a list
     if isinstance(data, list):
         return data
 
-    # data is a dict — try nested keys
+    # data is a dict
     if isinstance(data, dict):
-        # Standard: {"restaurants": [...]}
-        if "restaurants" in data:
-            return data["restaurants"] if isinstance(data["restaurants"], list) else []
-        # Maybe: {"data": {"restaurants": [...]}}
+        if "restaurants" in data and isinstance(data["restaurants"], list) and data["restaurants"]:
+            return data["restaurants"]
         if "data" in data and isinstance(data["data"], dict):
-            return data["data"].get("restaurants", [])
-        # Maybe: {"cards": [...]} or other Swiggy format
+            inner_rest = data["data"].get("restaurants", [])
+            if inner_rest and isinstance(inner_rest, list):
+                return inner_rest
+
+        # If dishes are returned, extract restaurants from dishes
+        dishes = data.get("dishes") or (data.get("data", {}).get("dishes") if isinstance(data.get("data"), dict) else None)
+        if isinstance(dishes, list) and dishes:
+            dish_restaurants = {}
+            for d in dishes:
+                r_id = d.get("restaurantId") or d.get("restaurant_id")
+                r_name = d.get("restaurantName") or d.get("restaurant_name")
+                if r_id and r_id not in dish_restaurants:
+                    dish_restaurants[r_id] = {
+                        "id": r_id,
+                        "name": r_name or "Restaurant",
+                        "cuisine": d.get("category", "Food"),
+                        "rating": d.get("restaurantRating", "4.0"),
+                        "menu_highlights": [f"{d.get('name')} (Rs.{d.get('price', '?')})"],
+                    }
+                elif r_id and len(dish_restaurants[r_id]["menu_highlights"]) < 3:
+                    dish_restaurants[r_id]["menu_highlights"].append(f"{d.get('name')} (Rs.{d.get('price', '?')})")
+            if dish_restaurants:
+                return list(dish_restaurants.values())
+
         if "cards" in data:
             return _extract_from_cards(data["cards"])
-        # Return empty if no recognized keys
-        return []
 
-    # data is a string — try to JSON parse it
+    # data is a string
     if isinstance(data, str):
+        import re
+        import json
+
+        # 1. Try direct JSON parse
         try:
-            import json
             parsed = json.loads(data)
-            return _extract_restaurants({"success": True, "data": parsed})
+            res = _extract_restaurants({"success": True, "data": parsed})
+            if res:
+                return res
         except Exception:
-            return []
+            pass
+
+        # 2. Try JSON regex search for codeblock or object
+        json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', data) or re.search(r'(\{[\s\S]*"restaurants"[\s\S]*\})', data)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(1))
+                res = _extract_restaurants({"success": True, "data": parsed})
+                if res:
+                    return res
+            except Exception:
+                pass
+
+        # 3. Parse markdown restaurant listings from Swiggy's text
+        text_restaurants = []
+        pattern = re.findall(r'(?:^|\n)\s*(?:\d+\.|\*|\-)?\s*\*\*([^*]+)\*\*(.*?)(?=\n|$)', data)
+        for name, details in pattern:
+            clean_name = name.strip()
+            if any(h in clean_name.lower() for h in ["food server", "popular items", "added to cart", "warning", "note"]):
+                continue
+            rating_match = re.search(r'(\d\.\d)\s*★?', details)
+            rating = rating_match.group(1) if rating_match else "4.2"
+            cuisine = re.sub(r'\(.*?\)', '', details).strip(" —-|,\t")
+            text_restaurants.append({
+                "id": f"rest_{len(text_restaurants)+1}",
+                "name": clean_name,
+                "cuisine": cuisine or "Multi-cuisine",
+                "rating": rating,
+                "distance_km": 1.5,
+            })
+        if text_restaurants:
+            return text_restaurants
 
     return []
 
@@ -188,21 +251,30 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
 
     restaurants = _extract_restaurants(rest_res)
 
-    # If specific query returned 0 restaurants, fetch all open restaurants as options
+    raw_text = rest_res.get("raw_text") or (rest_res.get("data") if isinstance(rest_res.get("data"), str) else "")
+
+    # If specific query returned 0 restaurants, fetch open restaurants with broad queries
     if not restaurants:
-        all_open_res = await client.call_tool("food", "search_restaurants", {
-            "addressId": address["id"], "query": ""
-        })
-        tool_logs.append({
-            "tool": "search_restaurants",
-            "args": {"addressId": address["id"], "query": ""},
-            "result": all_open_res
-        })
-        if all_open_res.get("success"):
-            restaurants = _extract_restaurants(all_open_res)
+        for fallback_q in ["", "food", "sweets"]:
+            if fallback_q == search_query:
+                continue
+            all_open_res = await client.call_tool("food", "search_restaurants", {
+                "addressId": address["id"], "query": fallback_q
+            })
+            tool_logs.append({
+                "tool": "search_restaurants",
+                "args": {"addressId": address["id"], "query": fallback_q},
+                "result": all_open_res
+            })
+            if all_open_res.get("success"):
+                restaurants = _extract_restaurants(all_open_res)
+                if not raw_text:
+                    raw_text = all_open_res.get("raw_text") or (all_open_res.get("data") if isinstance(all_open_res.get("data"), str) else "")
+                if restaurants:
+                    break
 
     # If search calls failed entirely (e.g. auth/MCP error), tell the user why
-    if not restaurants and not rest_res.get("success"):
+    if not restaurants and not rest_res.get("success") and not raw_text:
         error_msg = rest_res.get("error", "Unknown error connecting to Swiggy servers")
         return {
             "response_text": (
@@ -226,15 +298,21 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
         if not r_id:
             continue
 
-        menu_res = await client.call_tool("food", "get_restaurant_menu", {"restaurantId": r_id})
-        tool_logs.append({"tool": "get_restaurant_menu", "args": {"restaurantId": r_id}, "result": menu_res})
+        menu_res = await client.call_tool("food", "get_restaurant_menu", {
+            "addressId": address["id"],
+            "restaurantId": r_id,
+        })
+        tool_logs.append({
+            "tool": "get_restaurant_menu",
+            "args": {"addressId": address["id"], "restaurantId": r_id},
+            "result": menu_res,
+        })
 
         # Extract menu items — handle multiple formats
         menu_data = menu_res.get("data", {}) if menu_res.get("success") else {}
         if isinstance(menu_data, dict):
             items = menu_data.get("items", menu_data.get("menu", []))
             if isinstance(items, dict):
-                # Maybe items is nested: {"categories": [...]} or {"items": [...]}
                 items = items.get("items", items.get("categories", []))
         elif isinstance(menu_data, list):
             items = menu_data
@@ -260,7 +338,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             "name": r.get("name", "Unknown Restaurant"),
             "cuisine": r.get("cuisine", ", ".join(r.get("cuisines", [])) if isinstance(r.get("cuisines"), list) else ""),
             "rating": r.get("rating", r.get("avgRating", "N/A")),
-            "distance_km": r.get("distance_km", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0),
+            "distance_km": r.get("distance_km", r.get("distanceKm", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0)),
             "menu_highlights": menu_highlights,
         })
 
@@ -283,6 +361,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
             data={
                 "search_query": search_query,
                 "open_restaurants": restaurant_options,
+                "swiggy_raw_response": raw_text,
             },
             system_instruction=(
                 "You are the Swiggy MCP Food Orchestrator. "
@@ -304,14 +383,20 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
 
     # Standard fallback formatting if LLM is disabled
     text = f"**Food Server** (Priority Score: {rankings[0][1]}):\n\n"
-    text += f"Open restaurants near **{address['label']}**:\n"
-    for i, r in enumerate(restaurant_options):
-        text += f"  {i + 1}. **{r['name']}** — {r['cuisine']} ({r['rating']}★)\n"
+    loc_label = address.get('label') or address.get('address_line') or address.get('city') or 'your location'
+    if restaurant_options:
+        text += f"Open restaurants near **{loc_label}**:\n"
+        for i, r in enumerate(restaurant_options):
+            text += f"  {i + 1}. **{r['name']}** — {r['cuisine']} ({r['rating']}★)\n"
 
-    if restaurant_options and restaurant_options[0]["menu_highlights"]:
-        text += f"\nPopular items at **{restaurant_options[0]['name']}**:\n"
-        for item_str in restaurant_options[0]["menu_highlights"]:
-            text += f"  • {item_str}\n"
+        if restaurant_options[0].get("menu_highlights"):
+            text += f"\nPopular items at **{restaurant_options[0]['name']}**:\n"
+            for item_str in restaurant_options[0]["menu_highlights"]:
+                text += f"  • {item_str}\n"
+    elif raw_text and len(raw_text.strip()) > 10:
+        text += f"{raw_text}\n"
+    else:
+        text += f"No open restaurants found matching '{search_query or 'your request'}' near **{loc_label}** right now.\n"
 
     return {
         "response_text": text,
@@ -378,8 +463,15 @@ async def _add_to_cart(client, router, query, address, tool_logs):
         clean_search = re.sub(r'\s+from\s+.*|\s+to\s+cart.*', '', name_str, flags=re.IGNORECASE).strip()
         search_term = clean_search.lower().rstrip('s') if len(clean_search) > 3 else clean_search.lower()
 
-        search_res = await client.call_tool("food", "search_menu", {"query": search_term})
-        tool_logs.append({"tool": "search_menu", "args": {"query": search_term}, "result": search_res})
+        search_res = await client.call_tool("food", "search_menu", {
+            "addressId": address["id"],
+            "query": search_term,
+        })
+        tool_logs.append({
+            "tool": "search_menu",
+            "args": {"addressId": address["id"], "query": search_term},
+            "result": search_res,
+        })
 
         items_found = search_res.get("data", {}).get("items", []) if search_res.get("success") else []
 
@@ -390,23 +482,25 @@ async def _add_to_cart(client, router, query, address, tool_logs):
 
         if items_found:
             matched = items_found[0]
-            r_id = matched["restaurantId"]
-            r_name = matched.get("restaurantName", "Restaurant")
+            r_id = matched.get("restaurantId") or matched.get("restaurant_id")
+            r_name = matched.get("restaurantName") or matched.get("restaurant_name", "Restaurant")
+            item_id = matched.get("id") or matched.get("menu_item_id")
             if r_id not in matched_items_by_rest:
                 matched_items_by_rest[r_id] = {"rest_name": r_name, "items": []}
             matched_items_by_rest[r_id]["items"].append({
-                "itemId": matched["id"],
+                "itemId": item_id,
                 "name": matched["name"],
                 "quantity": qty,
-                "price": matched["price"]
+                "price": matched.get("price", 0),
             })
         else:
             not_found.append(name_str)
 
     if not matched_items_by_rest:
         missing_str = ", ".join([f"'{n}'" for n in not_found])
+        loc_label = address.get('label') or 'your location'
         return {
-            "response_text": f"Could not find {missing_str} on the menu of any OPEN restaurant near **{address['label']}**.",
+            "response_text": f"Could not find {missing_str} on the menu of any OPEN restaurant near **{loc_label}**.",
             "tool_calls": tool_logs,
             "active_server": "food",
             "state": router.current_state,
@@ -416,16 +510,17 @@ async def _add_to_cart(client, router, query, address, tool_logs):
     target_rest_id = max(matched_items_by_rest.keys(), key=lambda r: len(matched_items_by_rest[r]["items"]))
     target_rest = matched_items_by_rest[target_rest_id]
     rest_name = target_rest["rest_name"]
-    items_payload = [{"itemId": it["itemId"], "quantity": it["quantity"]} for it in target_rest["items"]]
+    items_payload = [{"menu_item_id": it["itemId"], "quantity": it["quantity"]} for it in target_rest["items"]]
 
     cart_res = await client.call_tool("food", "update_food_cart", {
         "restaurantId": target_rest_id,
-        "items": items_payload
+        "cartItems": items_payload,
+        "addressId": address["id"],
     })
     tool_logs.append({
         "tool": "update_food_cart",
-        "args": {"restaurantId": target_rest_id, "items": items_payload},
-        "result": cart_res
+        "args": {"restaurantId": target_rest_id, "cartItems": items_payload, "addressId": address["id"]},
+        "result": cart_res,
     })
 
     if not cart_res.get("success"):

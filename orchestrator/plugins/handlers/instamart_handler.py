@@ -189,11 +189,23 @@ async def _add_to_cart(client, router, query, address, tool_logs):
         }
 
     target = in_stock[0]
+    spin_id = target.get("spinId") or target.get("id")
+    sku_id = target.get("skuId") or target.get("id")
 
+    item_payload = {
+        "spinId": spin_id,
+        "skuId": sku_id,
+        "quantity": quantity,
+    }
     update_res = await client.call_tool("instamart", "update_cart", {
-        "items": [{"productId": target["id"], "quantity": quantity}]
+        "selectedAddressId": address["id"],
+        "items": [item_payload],
     })
-    tool_logs.append({"tool": "update_cart", "args": {"items": [{"productId": target["id"], "quantity": quantity}]}, "result": update_res})
+    tool_logs.append({
+        "tool": "update_cart",
+        "args": {"selectedAddressId": address["id"], "items": [item_payload]},
+        "result": update_res,
+    })
 
     if not update_res.get("success"):
         return {
@@ -203,21 +215,24 @@ async def _add_to_cart(client, router, query, address, tool_logs):
             "state": router.current_state,
         }
 
-    cart_data = update_res["data"]
+    cart_data = update_res.get("data", {})
+    items_list = cart_data.get("items", [target]) if isinstance(cart_data, dict) else [target]
+    items_str = ", ".join(f"{it.get('quantity', quantity)}x {it.get('name', item_name)}" for it in items_list if isinstance(it, dict))
+    total_val = cart_data.get('grand_total', cart_data.get('total', target.get('price', 0) * quantity)) if isinstance(cart_data, dict) else (target.get('price', 0) * quantity)
 
     router.current_state["stage"] = "awaiting_order_confirm"
     router.current_state["pending_action"] = {
         "server": "instamart",
         "tool_name": "checkout",
-        "arguments": {},
+        "arguments": {"addressId": address["id"]},
     }
 
-    items_str = ", ".join(f"{it['quantity']}x {it['name']}" for it in cart_data["items"])
+    delivery_charge = cart_data.get('delivery_charge', 0) if isinstance(cart_data, dict) else 0
     return {
         "response_text": (
             f"Instamart cart: {items_str}.\n"
-            f"Delivery: Rs.{cart_data.get('delivery_charge', 0)} (Free above Rs.199)\n"
-            f"**Total: Rs.{cart_data['grand_total']}**\n"
+            f"Delivery: Rs.{delivery_charge} (Free above Rs.199)\n"
+            f"**Total: Rs.{total_val}**\n"
             f"Confirm placing this order? (yes/no)"
         ),
         "tool_calls": tool_logs,

@@ -85,19 +85,20 @@ def create_orchestrator(
         llm_client=llm,
     )
 
-    # 6. Router — uses the Hybrid Client (sim_client) which delegates to real or local
+    # 6. Router — when oauth_client is available, use real mcp_client directly (no mock)
+    active_client = mcp_client if mcp_client else sim_client
     router = OrchestratorRouter(
-        client=sim_client,
+        client=active_client,
         prioritizer=prioritizer,
         llm=llm,
     )
 
-    # Attach the real MCP client so the Hybrid Client can proxy remote calls to it
+    # Attach references
     sim_client.real_mcp_client = mcp_client
     router.mcp_client = mcp_client
 
-    # 7. Register Domain Handlers (correct import paths)
-    register_plugins(router, sim_client)
+    # 7. Register Domain Handlers (using real active_client)
+    register_plugins(router, active_client)
 
     return router
 

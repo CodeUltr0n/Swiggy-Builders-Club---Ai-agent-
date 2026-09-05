@@ -471,16 +471,25 @@ class MCPClient:
             # Swiggy MCP returns TWO parts in each response:
             #   - "content": human-readable text for display
             #   - "structuredContent": machine-readable data for programmatic use
-            # Prefer structuredContent when available
             structured = result.get("structuredContent") if isinstance(result, dict) else None
             content = result.get("content", []) if isinstance(result, dict) else result
 
+            # Extract raw human-readable text from content
+            text_parts = []
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        text_parts.append(item.get("text", str(item)))
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+            elif isinstance(content, str):
+                text_parts.append(content)
+            raw_text = "\n".join(text_parts).strip()
+
             if structured and isinstance(structured, dict):
-                # structuredContent is the real data — use it directly
                 logger.info(f"MCP [{server_name}] Using structuredContent, keys: {list(structured.keys())}")
                 parsed_data = structured
             else:
-                # Fall back to parsing content text
                 parsed_data = self._parse_mcp_content(content)
 
             logger.info(f"MCP [{server_name}] Parsed data type: {type(parsed_data).__name__}, preview: {str(parsed_data)[:300]}")
@@ -491,9 +500,19 @@ class MCPClient:
                 parsed_data["tool_name"] = tool_name
                 parsed_data["server"] = server_name
                 parsed_data["raw_content"] = content
+                parsed_data["raw_text"] = raw_text
+                parsed_data["structured"] = structured
                 return parsed_data
 
-            return {"success": True, "data": parsed_data, "raw_content": content, "tool_name": tool_name, "server": server_name}
+            return {
+                "success": True,
+                "data": parsed_data,
+                "raw_content": content,
+                "raw_text": raw_text,
+                "structured": structured,
+                "tool_name": tool_name,
+                "server": server_name,
+            }
 
         except MCPError as e:
             return {"success": False, "error": e.message, "error_code": e.code, "tool_name": tool_name, "server": server_name}
@@ -526,14 +545,7 @@ class MCPClient:
 
     @staticmethod
     def _parse_mcp_content(content) -> Any:
-        """Parse MCP content into usable data.
-
-        Handles multiple formats:
-        - list of {"type": "text", "text": "..."} dicts (standard MCP)
-        - list of plain strings
-        - a single string
-        - a dict (already parsed)
-        """
+        """Parse MCP content into usable data."""
         if content is None:
             return {}
 
@@ -541,12 +553,20 @@ class MCPClient:
         if isinstance(content, dict):
             return content
 
-        # Single string — try JSON parse
+        import re
+        import json as _json
+
+        # Single string — try JSON parse or embedded code blocks
         if isinstance(content, str):
             try:
-                import json as _json
                 return _json.loads(content)
             except Exception:
+                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
+                if json_match:
+                    try:
+                        return _json.loads(json_match.group(1))
+                    except Exception:
+                        pass
                 return content
 
         # List
@@ -563,13 +583,28 @@ class MCPClient:
                 else:
                     text_parts.append(str(item))
 
-            combined = "\n".join(text_parts)
+            combined = "\n".join(text_parts).strip()
 
             try:
-                import json as _json
                 return _json.loads(combined)
             except Exception:
                 pass
+
+            # Try to extract JSON from code block
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', combined)
+            if json_match:
+                try:
+                    return _json.loads(json_match.group(1))
+                except Exception:
+                    pass
+
+            # Try to extract first {...} or [...]
+            brace_match = re.search(r'(\{[\s\S]*\}|\[[\s\S]*\])', combined)
+            if brace_match:
+                try:
+                    return _json.loads(brace_match.group(1))
+                except Exception:
+                    pass
 
             return text_parts[0] if len(text_parts) == 1 else combined
 

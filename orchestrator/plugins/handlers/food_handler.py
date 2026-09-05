@@ -435,7 +435,9 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                 for item_str in r["menu_highlights"][:4]:
                     text += f"   • {item_str}\n"
             text += "\n"
-    elif raw_text and len(raw_text.strip()) > 10:
+    elif raw_text and ("total\":0" in raw_text or "totalRestaurants\":0" in raw_text or "restaurants\":[]" in raw_text):
+        text += f"No open restaurants are currently delivering **{search_query}** to **{loc_label}** right now.\n\nPlease check back during restaurant operating hours or choose another delivery location."
+    elif raw_text and len(raw_text.strip()) > 10 and not raw_text.strip().startswith("{"):
         text += f"{raw_text}\n"
     else:
         text += f"No open restaurants found matching '{search_query or 'your request'}' near **{loc_label}** right now.\n"

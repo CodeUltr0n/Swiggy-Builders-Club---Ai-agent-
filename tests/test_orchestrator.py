@@ -129,3 +129,25 @@ async def test_order_idempotency_handling(router, client):
     assert "Success" in res["response_text"]
     assert "Verified using get_food_orders" in res["response_text"]
     assert food_plugin.has_flaked is True
+
+
+# Test 7: Dish relevance scoring for sweet queries (Gulab Jamun vs Khichdi)
+def test_dish_relevance_scoring():
+    from orchestrator.plugins.handlers.food_handler import _score_dish_relevance
+
+    sweet_dish = {"name": "Gulab Jamun [2 Pieces]", "description": "Soft delicious sweet dessert", "isBestseller": True}
+    jalebi_dish = {"name": "Special Khowa Jalebi", "description": "Crispy sweet mithai", "isBestseller": False}
+    khichdi_dish = {"name": "Plain Moong Dal Khichdi", "description": "Comfort rice meal", "isBestseller": True}
+
+    score_sweet_gj = _score_dish_relevance(sweet_dish, "sweet")
+    score_sweet_jalebi = _score_dish_relevance(jalebi_dish, "sweet")
+    score_sweet_khichdi = _score_dish_relevance(khichdi_dish, "sweet")
+
+    assert score_sweet_gj > score_sweet_khichdi
+    assert score_sweet_jalebi > score_sweet_khichdi
+
+    # Test typo tolerance e.g. "gulab jaamun"
+    score_typo = _score_dish_relevance(sweet_dish, "gulab jaamun")
+    assert score_typo > 150.0
+    assert score_typo > _score_dish_relevance(khichdi_dish, "gulab jaamun")
+

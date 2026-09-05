@@ -214,6 +214,91 @@ async def _track_order(client, router, address, tool_logs):
     }
 
 
+def _score_dish_relevance(dish: dict, query: str, restaurant: dict = None) -> float:
+    """Calculate contextual relevance score for a dish based on user query, synonyms, and quality signals."""
+    dish_name = dish.get("name", "").lower()
+    dish_desc = dish.get("description", "").lower()
+    rest_name = (restaurant.get("name") if restaurant else dish.get("restaurantName", "")).lower()
+    rest_cuisine = (restaurant.get("cuisine") if restaurant else "").lower()
+
+    score = 0.0
+
+    # Base quality score (bestsellers and high ratings)
+    if dish.get("isBestseller"):
+        score += 15.0
+    try:
+        r_val = float(dish.get("rating", 4.0))
+        score += r_val * 2.0
+    except (ValueError, TypeError):
+        score += 8.0
+
+    if not query:
+        return score
+
+    import re
+    q_lower = query.lower().strip()
+    # Normalize common phonetics / typo variants (e.g. jaamun -> jamun, biriyani -> biryani)
+    q_normalized = re.sub(r'aa+', 'a', q_lower)
+    q_normalized = re.sub(r'ee+', 'e', q_normalized)
+    q_normalized = re.sub(r'oo+', 'o', q_normalized)
+
+    q_words = [w for w in re.split(r'[\s,]+', q_lower) if len(w) > 2 and w not in {"the", "and", "for", "with", "near", "some", "likes", "like"}]
+
+    # 1. Exact query phrase match in dish name
+    if q_lower in dish_name or q_normalized in dish_name:
+        score += 200.0
+
+    # 2. Query words in dish name & description
+    for w in q_words:
+        w_norm = re.sub(r'aa+', 'a', w)
+        if re.search(rf'\b{re.escape(w)}', dish_name) or re.search(rf'\b{re.escape(w_norm)}', dish_name):
+            score += 120.0
+        elif w in dish_name or w_norm in dish_name:
+            score += 60.0
+        elif w in dish_desc:
+            score += 25.0
+
+    # 3. Rich Indian food category keywords & synonyms expansion
+    SWEET_TERMS = {
+        "sweet", "sweets", "mithai", "dessert", "desserts", "jalebi", "gulab jamun", "jamun", "jaamun",
+        "halwa", "rasgulla", "peda", "barfi", "burfi", "laddu", "laddoo", "kheer", "rabdi", "rabri",
+        "kulfi", "rasmalai", "ice cream", "cake", "pastry", "mysore pak", "chikki", "sandesh", 
+        "payasam", "malpua", "soan papdi", "khowa", "badam halwa", "gajar halwa", "moong dal halwa",
+        "gulab", "rasgula", "cham cham", "dry fruit", "sweet box", "gulabjamun"
+    }
+    BIRYANI_TERMS = {"biryani", "biriyani", "pulao", "pulav", "mandi", "khichdi", "rice"}
+    SNACK_TERMS = {"snack", "snacks", "chaat", "samosa", "kachori", "pakoda", "pakora", "bhel", "vada", "roll"}
+    PIZZA_TERMS = {"pizza", "pasta", "garlic bread", "calzone"}
+    BURGER_TERMS = {"burger", "wrap", "fries", "sandwich"}
+
+    matched_category_terms = set()
+    if any(w in q_lower or w in q_normalized for w in ["sweet", "mithai", "dessert", "halwa", "jamun", "jalebi", "gulab"]):
+        matched_category_terms = SWEET_TERMS
+    elif any(w in q_lower or w in q_normalized for w in ["biryani", "biriyani", "pulao"]):
+        matched_category_terms = BIRYANI_TERMS
+    elif any(w in q_lower for w in ["snack", "chaat", "samosa", "kachori"]):
+        matched_category_terms = SNACK_TERMS
+    elif any(w in q_lower for w in ["pizza", "pasta"]):
+        matched_category_terms = PIZZA_TERMS
+    elif any(w in q_lower for w in ["burger", "sandwich", "wrap"]):
+        matched_category_terms = BURGER_TERMS
+
+    if matched_category_terms:
+        for term in matched_category_terms:
+            if re.search(rf'\b{re.escape(term)}', dish_name):
+                score += 85.0
+            elif term in dish_desc:
+                score += 20.0
+
+    # 4. Restaurant specialization signals
+    if q_lower in rest_name or (matched_category_terms and any(t in rest_name for t in matched_category_terms)):
+        score += 45.0
+    if q_lower in rest_cuisine or (matched_category_terms and any(t in rest_cuisine for t in matched_category_terms)):
+        score += 30.0
+
+    return score
+
+
 def _extract_dishes_from_menu(menu_data: Any, r_id: str, r_name: str) -> list:
     """Recursively extract all real food dishes from Swiggy menu categories and subcategories."""
     dishes = []
@@ -403,44 +488,57 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
                         "inStock": dd.get("inStock", 1)
                     })
 
-    for r in restaurants[:3]:
-        if not isinstance(r, dict):
-            logger.warning(f"Skipping non-dict restaurant entry: {type(r).__name__}")
-            continue
-        r_id = r.get("id")
-        r_name = r.get("name", "Unknown Restaurant")
-        if not r_id:
-            continue
+    valid_rests = [r for r in restaurants[:3] if isinstance(r, dict) and r.get("id")]
 
-        menu_res = await client.call_tool("food", "get_restaurant_menu", {
-            "addressId": address["id"],
-            "restaurantId": r_id,
-        })
-        tool_logs.append({
-            "tool": "get_restaurant_menu",
-            "args": {"addressId": address["id"], "restaurantId": r_id},
-            "result": menu_res,
-        })
+    if valid_rests:
+        # Fetch menus concurrently with asyncio.gather to eliminate multi-second latency
+        import asyncio
+        menu_tasks = [
+            client.call_tool("food", "get_restaurant_menu", {
+                "addressId": address["id"],
+                "restaurantId": r["id"],
+            })
+            for r in valid_rests
+        ]
+        menu_results = await asyncio.gather(*menu_tasks, return_exceptions=True)
 
-        # Recursively extract all genuine dishes
-        menu_data = menu_res.get("data", {}) if (menu_res.get("success") and isinstance(menu_res.get("data"), dict)) else {}
-        dishes = _extract_dishes_from_menu(menu_data, r_id, r_name)
-        all_extracted_dishes.extend(dishes)
+        for r, menu_res in zip(valid_rests, menu_results):
+            r_id = r.get("id")
+            r_name = r.get("name", "Unknown Restaurant")
+            if isinstance(menu_res, Exception):
+                logger.warning(f"Error fetching menu for {r_name}: {menu_res}")
+                menu_res = {"success": False}
 
-        # Build menu highlights safely with Indian Rupee symbol
-        menu_highlights = []
-        for it in dishes[:6]:
-            menu_highlights.append(f"{it['name']} (₹{it['price']})")
+            tool_logs.append({
+                "tool": "get_restaurant_menu",
+                "args": {"addressId": address["id"], "restaurantId": r_id},
+                "result": menu_res,
+            })
 
-        restaurant_options.append({
-            "id": r_id,
-            "name": r_name,
-            "cuisine": r.get("cuisine", ", ".join(r.get("cuisines", [])) if isinstance(r.get("cuisines"), list) else ""),
-            "rating": r.get("rating", r.get("avgRating", "N/A")),
-            "distance_km": r.get("distance_km", r.get("distanceKm", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0)),
-            "menu_highlights": menu_highlights,
-            "dishes": dishes,
-        })
+            menu_data = menu_res.get("data", {}) if (isinstance(menu_res, dict) and menu_res.get("success") and isinstance(menu_res.get("data"), dict)) else {}
+            dishes = _extract_dishes_from_menu(menu_data, r_id, r_name)
+
+            # Sort restaurant dishes by relevance to query
+            dishes.sort(key=lambda d: _score_dish_relevance(d, search_query, r), reverse=True)
+            all_extracted_dishes.extend(dishes)
+
+            # Build menu highlights prioritizing top-scoring dishes
+            menu_highlights = []
+            for it in dishes[:4]:
+                menu_highlights.append(f"{it['name']} (₹{it['price']})")
+
+            restaurant_options.append({
+                "id": r_id,
+                "name": r_name,
+                "cuisine": r.get("cuisine", ", ".join(r.get("cuisines", [])) if isinstance(r.get("cuisines"), list) else ""),
+                "rating": r.get("rating", r.get("avgRating", "N/A")),
+                "distance_km": r.get("distance_km", r.get("distanceKm", r.get("sla", {}).get("lastMileTravel", 0) if isinstance(r.get("sla"), dict) else 0)),
+                "menu_highlights": menu_highlights,
+                "dishes": dishes,
+            })
+
+    # Global sort across all restaurants by contextual relevance to query
+    all_extracted_dishes.sort(key=lambda d: _score_dish_relevance(d, search_query), reverse=True)
 
     # Add dedicated dish tool call for frontend dish carousel rendering
     if all_extracted_dishes:

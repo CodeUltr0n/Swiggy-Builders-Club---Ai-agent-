@@ -151,3 +151,11 @@ def test_dish_relevance_scoring():
     assert score_typo > 150.0
     assert score_typo > _score_dish_relevance(khichdi_dish, "gulab jaamun")
 
+    # Test None safety (guarantees no AttributeError: 'NoneType' object has no attribute 'lower')
+    dish_with_nones = {"name": None, "description": None}
+    rest_with_nones = {"name": None, "cuisine": None}
+    score_nones = _score_dish_relevance(dish_with_nones, None, rest_with_nones)
+    assert score_nones >= 0.0
+    score_nones_with_query = _score_dish_relevance(dish_with_nones, "sweet", rest_with_nones)
+    assert score_nones_with_query >= 0.0
+

@@ -268,8 +268,9 @@ async def _book_table(client, router, query, context, tool_logs):
 
     # 2. Check active cached restaurant from prior turn
     cached_id = router.current_state.get("active_restaurant_id")
-    cached_name = router.current_state.get("active_restaurant_name", "")
-    if cached_id and (not mentioned_rest or mentioned_rest.lower() in cached_name.lower() or cached_name.lower() in (mentioned_rest or "").lower()):
+    cached_name = str(router.current_state.get("active_restaurant_name") or "")
+    m_rest_str = str(mentioned_rest or "").strip()
+    if cached_id and (not m_rest_str or m_rest_str.lower() in cached_name.lower() or cached_name.lower() in m_rest_str.lower()):
         rest_id = cached_id
         target_name = cached_name
     elif mentioned_rest:

@@ -216,10 +216,18 @@ async def _track_order(client, router, address, tool_logs):
 
 def _score_dish_relevance(dish: dict, query: str, restaurant: dict = None) -> float:
     """Calculate contextual relevance score for a dish based on user query, synonyms, and quality signals."""
-    dish_name = dish.get("name", "").lower()
-    dish_desc = dish.get("description", "").lower()
-    rest_name = (restaurant.get("name") if restaurant else dish.get("restaurantName", "")).lower()
-    rest_cuisine = (restaurant.get("cuisine") if restaurant else "").lower()
+    dish_name = str(dish.get("name") or "").lower()
+    dish_desc = str(dish.get("description") or "").lower()
+
+    rest_name = ""
+    if restaurant and restaurant.get("name"):
+        rest_name = str(restaurant["name"]).lower()
+    elif dish.get("restaurantName"):
+        rest_name = str(dish["restaurantName"]).lower()
+
+    rest_cuisine = ""
+    if restaurant and restaurant.get("cuisine"):
+        rest_cuisine = str(restaurant["cuisine"]).lower()
 
     score = 0.0
 
@@ -236,7 +244,7 @@ def _score_dish_relevance(dish: dict, query: str, restaurant: dict = None) -> fl
         return score
 
     import re
-    q_lower = query.lower().strip()
+    q_lower = str(query or "").lower().strip()
     # Normalize common phonetics / typo variants (e.g. jaamun -> jamun, biriyani -> biryani)
     q_normalized = re.sub(r'aa+', 'a', q_lower)
     q_normalized = re.sub(r'ee+', 'e', q_normalized)

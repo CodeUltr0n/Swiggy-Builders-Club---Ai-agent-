@@ -110,6 +110,15 @@ class OrchestratorRouter:
 
         confirm = self._is_confirmation_query(query_lower)
         if confirm is None:
+            # If user entered a new intent or full sentence, cancel pending confirmation and proceed
+            import re
+            new_intent_keywords = {"search", "find", "show", "order", "buy", "book", "get", "what", "where", "how", "sweets", "food", "milk", "table", "dineout", "instamart", "biryani"}
+            words = set(re.findall(r'\w+', query_lower))
+            if len(query.split()) > 2 or bool(words & new_intent_keywords):
+                logger.info(f"User entered new query '{query}' during confirmation. Resetting state.")
+                self.reset_state()
+                return None
+
             return {
                 "response_text": "I didn't catch that. Please reply with **yes** to confirm or **no** to cancel.",
                 "tool_calls": [],
@@ -221,8 +230,12 @@ class OrchestratorRouter:
         self.current_state["active_server"] = primary_server
 
         # 3. Resolve address (common step across all servers)
-        addr_res = await self.client.call_tool(primary_server, "get_addresses", {})
-        tool_logs.append({"tool": "get_addresses", "args": {}, "result": addr_res})
+        # Note: Dineout has get_saved_locations, while food/instamart have get_addresses.
+        # Calling get_addresses on food resolves user delivery address & GPS coordinates across Swiggy.
+        addr_server = "food" if primary_server == "dineout" else primary_server
+        addr_tool = "get_addresses"
+        addr_res = await self.client.call_tool(addr_server, addr_tool, {})
+        tool_logs.append({"tool": f"{addr_tool} ({addr_server})", "args": {}, "result": addr_res})
 
         raw_data = addr_res.get("data") if addr_res.get("success") else None
         raw_text = addr_res.get("raw_text", "")

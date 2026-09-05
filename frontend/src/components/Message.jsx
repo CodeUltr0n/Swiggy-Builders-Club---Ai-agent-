@@ -11,18 +11,36 @@ export default function Message({ msg, isLatestAgentMsg }) {
   let products = [];
   if (isAgent && msg.tool_calls) {
     const searchRes = msg.tool_calls.find(t => t.tool === 'search_restaurants' || t.tool === 'search_restaurants_dineout');
-    if (searchRes && searchRes.result && searchRes.result.data) {
+    if (searchRes && searchRes.result) {
       const d = searchRes.result.data;
-      if (Array.isArray(d.restaurants)) {
+      const s = searchRes.result.structured;
+      if (Array.isArray(d)) {
+        restaurants = d;
+      } else if (d && Array.isArray(d.restaurants)) {
         restaurants = d.restaurants;
+      } else if (s && Array.isArray(s.restaurants)) {
+        restaurants = s.restaurants;
       }
     }
 
     const prodRes = msg.tool_calls.find(t => t.tool === 'search_products');
-    if (prodRes && prodRes.result && prodRes.result.data) {
+    if (prodRes && prodRes.result) {
       const d = prodRes.result.data;
-      if (Array.isArray(d.products)) {
-        products = d.products;
+      const s = prodRes.result.structured;
+      const rawList = Array.isArray(d) ? d : (d?.products || s?.products || []);
+      if (Array.isArray(rawList)) {
+        products = rawList.map(p => {
+          const firstVar = Array.isArray(p.variations) && p.variations.length > 0 ? p.variations[0] : {};
+          const pVal = p.price?.offerPrice || p.price?.mrp || firstVar.price?.offerPrice || firstVar.price?.mrp || p.price || 0;
+          return {
+            ...p,
+            name: p.displayName || p.name || firstVar.displayName || 'Grocery Item',
+            brand: p.brand || firstVar.brandName || '',
+            price: pVal,
+            imageUrl: firstVar.imageUrl || p.imageUrl || '',
+            quantity: firstVar.quantityDescription || p.quantity || ''
+          };
+        });
       }
     }
   }

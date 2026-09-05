@@ -76,9 +76,41 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
             prod_list = prod_data.get("products", prod_data.get("data", []))
             if isinstance(prod_list, list):
                 for p in prod_list:
-                    if isinstance(p, dict) and p.get("id") and p["id"] not in seen_ids:
-                        seen_ids.add(p["id"])
-                        products.append(p)
+                    if not isinstance(p, dict):
+                        continue
+                    variations = p.get("variations", [])
+                    first_var = variations[0] if (isinstance(variations, list) and variations and isinstance(variations[0], dict)) else {}
+                    
+                    p_id = p.get("productId") or first_var.get("spinId") or first_var.get("skuId") or p.get("id")
+                    if not p_id or p_id in seen_ids:
+                        continue
+                    seen_ids.add(p_id)
+                    
+                    # Normalize fields for LLM and UI cards
+                    norm_prod = dict(p)
+                    norm_prod["id"] = p_id
+                    norm_prod["name"] = p.get("displayName") or first_var.get("displayName") or p.get("name") or "Grocery Item"
+                    norm_prod["brand"] = p.get("brand") or first_var.get("brandName") or ""
+                    
+                    # Price extraction
+                    price_obj = p.get("price") if isinstance(p.get("price"), dict) else first_var.get("price", {})
+                    p_val = price_obj.get("offerPrice") or price_obj.get("mrp") or norm_prod.get("price") or 0
+                    norm_prod["price"] = p_val
+                    norm_prod["mrp"] = price_obj.get("mrp") or p_val
+                    
+                    # Image URL & description
+                    norm_prod["imageUrl"] = first_var.get("imageUrl") or p.get("imageUrl") or ""
+                    norm_prod["quantity"] = first_var.get("quantityDescription") or p.get("quantity") or ""
+                    
+                    # Stock & SLA
+                    norm_prod["in_stock"] = first_var.get("isInStockAndAvailable", p.get("inStock", True))
+                    norm_prod["sla"] = first_var.get("sla", {}).get("value", "15-25")
+                    
+                    # IDs for cart operations
+                    norm_prod["spinId"] = first_var.get("spinId")
+                    norm_prod["skuId"] = first_var.get("skuId")
+                    
+                    products.append(norm_prod)
 
     # LLM Dynamic Reasoning & Response Generation
     if router.llm and router.llm.api_key:
@@ -90,7 +122,6 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
                 "priority_server": rankings[0][0] if rankings else "instamart",
                 "priority_score": rankings[0][1] if rankings else 1.0,
             },
-
             data={
                 "search_query": search_query,
                 "products_found": products,
@@ -103,7 +134,6 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
                 "Highlight available key items, exact prices, stock status, and suggest how to add them to cart."
             )
         )
-
 
         if llm_response:
             return {
@@ -122,12 +152,21 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
         }
 
     text = f"**Instamart** (Priority Score: {rankings[0][1]}):\n\n"
-    text += f"Results for '{search_query}' near **{address['label']}**:\n"
-    for i, p in enumerate(products[:4]):
+    loc_name = address.get('label') or address.get('address_line') or 'Home'
+    text += f"Available on Instamart near **{loc_name}**:\n\n"
+    for i, p in enumerate(products[:5]):
         stock = "" if p.get("in_stock", True) else " *(Out of stock)*"
-        text += f"  {i + 1}. **{p['name']}** — Rs.{p['price']}{stock}\n"
+        qty_str = f" ({p['quantity']})" if p.get("quantity") else ""
+        brand_str = f" — {p['brand']}" if p.get("brand") else ""
+        text += f"{i + 1}. **{p['name']}**{qty_str}{brand_str}\n"
+        text += f"   • Price: **₹{p['price']}**"
+        if p.get("mrp") and p["mrp"] > p["price"]:
+            text += f" ~~(MRP ₹{p['mrp']})~~"
+        if p.get("sla"):
+            text += f" | ⚡ Delivery in {p['sla']} mins"
+        text += f"{stock}\n\n"
 
-    text += "\nWant me to add any of these to your cart?"
+    text += "💡 *To add to cart, reply: 'add 1 <item name>'*"
     return {
         "response_text": text,
         "tool_calls": tool_logs,
@@ -185,19 +224,46 @@ async def _add_to_cart(client, router, query, address, tool_logs):
             "state": router.current_state,
         }
 
-    products = prod_res["data"]["products"]
-    in_stock = [p for p in products if p.get("in_stock", True)]
+    in_stock = []
+    for p in products:
+        if not isinstance(p, dict):
+            continue
+        vars_list = p.get("variations", [])
+        if isinstance(vars_list, list) and vars_list:
+            for v in vars_list:
+                if isinstance(v, dict) and v.get("isInStockAndAvailable", True) and (v.get("spinId") or v.get("skuId")):
+                    price_val = 0
+                    if isinstance(v.get("price"), dict):
+                        price_val = v["price"].get("offerPrice") or v["price"].get("mrp") or 0
+                    elif isinstance(v.get("price"), (int, float)):
+                        price_val = v["price"]
+                    in_stock.append({
+                        "name": v.get("displayName") or p.get("displayName") or p.get("name", item_name),
+                        "spinId": v.get("spinId"),
+                        "skuId": v.get("skuId"),
+                        "price": price_val,
+                        "quantityDescription": v.get("quantityDescription", ""),
+                    })
+        elif p.get("spinId") or p.get("productId") or p.get("id"):
+            in_stock.append({
+                "name": p.get("displayName") or p.get("name", item_name),
+                "spinId": p.get("spinId") or p.get("productId") or p.get("id"),
+                "skuId": p.get("skuId") or p.get("productId") or p.get("id"),
+                "price": p.get("price", 0) if isinstance(p.get("price"), (int, float)) else 0,
+                "quantityDescription": p.get("quantity", ""),
+            })
+
     if not in_stock:
         return {
-            "response_text": f"'{item_name}' is out of stock on Instamart.",
+            "response_text": f"'{item_name}' is currently out of stock on Instamart.",
             "tool_calls": tool_logs,
             "active_server": "instamart",
             "state": router.current_state,
         }
 
     target = in_stock[0]
-    spin_id = target.get("spinId") or target.get("id")
-    sku_id = target.get("skuId") or target.get("id")
+    spin_id = target.get("spinId") or "SPIN_DEFAULT"
+    sku_id = target.get("skuId") or "SKU_DEFAULT"
 
     item_payload = {
         "spinId": spin_id,
@@ -224,7 +290,7 @@ async def _add_to_cart(client, router, query, address, tool_logs):
 
     cart_data = update_res.get("data", {})
     items_list = cart_data.get("items", [target]) if isinstance(cart_data, dict) else [target]
-    items_str = ", ".join(f"{it.get('quantity', quantity)}x {it.get('name', item_name)}" for it in items_list if isinstance(it, dict))
+    items_str = ", ".join(f"{it.get('quantity', quantity)}x {it.get('name', target['name'])}" for it in items_list if isinstance(it, dict))
     total_val = cart_data.get('grand_total', cart_data.get('total', target.get('price', 0) * quantity)) if isinstance(cart_data, dict) else (target.get('price', 0) * quantity)
 
     router.current_state["stage"] = "awaiting_order_confirm"
@@ -237,10 +303,11 @@ async def _add_to_cart(client, router, query, address, tool_logs):
     delivery_charge = cart_data.get('delivery_charge', 0) if isinstance(cart_data, dict) else 0
     return {
         "response_text": (
-            f"Instamart cart: {items_str}.\n"
-            f"Delivery: Rs.{delivery_charge} (Free above Rs.199)\n"
-            f"**Total: Rs.{total_val}**\n"
-            f"Confirm placing this order? (yes/no)"
+            f"🛒 **Instamart Cart**:\n"
+            f"• {items_str}\n"
+            f"• Delivery: ₹{delivery_charge} (Free above ₹199)\n"
+            f"• **Grand Total: ₹{total_val}**\n\n"
+            f"Confirm placing this order? Reply **yes** or **no**."
         ),
         "tool_calls": tool_logs,
         "active_server": "instamart",
@@ -253,18 +320,28 @@ async def _track_order(client, router, tool_logs):
     tool_logs.append({"tool": "get_orders", "args": {}, "result": orders_res})
 
     if orders_res.get("success") and orders_res.get("data"):
-        latest = orders_res["data"][0]
-        track_res = await client.call_tool("instamart", "track_order", {"orderId": latest["id"]})
-        tool_logs.append({"tool": "track_order", "args": {"orderId": latest["id"]}, "result": track_res})
+        data = orders_res["data"]
+        orders_list = data if isinstance(data, list) else (data.get("orders", []) if isinstance(data, dict) else [])
+        if orders_list:
+            latest = orders_list[0]
+            order_id = latest.get("orderId") or latest.get("id")
+            track_res = await client.call_tool("instamart", "track_order", {
+                "orderId": order_id,
+                "lat": 12.9784,
+                "lng": 77.6408,
+            })
+            tool_logs.append({"tool": "track_order", "args": {"orderId": order_id, "lat": 12.9784, "lng": 77.6408}, "result": track_res})
 
-        if track_res.get("success"):
-            d = track_res["data"]
-            return {
-                "response_text": f"Instamart Order **{latest['id']}**:\nStatus: **{d['status']}**\nETA: **{d['etaMinutes']} min**",
-                "tool_calls": tool_logs,
-                "active_server": "instamart",
-                "state": router.current_state,
-            }
+            if track_res.get("success"):
+                d = track_res["data"] if isinstance(track_res.get("data"), dict) else {}
+                status_str = d.get("status") or d.get("orderStatus") or "DELIVERED"
+                eta_str = f"\nETA: **{d.get('etaMinutes') or d.get('deliveryTime', 15)} min**" if (d.get("etaMinutes") or d.get("deliveryTime")) else ""
+                return {
+                    "response_text": f"📦 Instamart Order **{order_id}**:\nStatus: **{status_str}**{eta_str}",
+                    "tool_calls": tool_logs,
+                    "active_server": "instamart",
+                    "state": router.current_state,
+                }
 
     return {
         "response_text": "No active Instamart orders to track.",

@@ -16,6 +16,7 @@ from html import escape as html_escape
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from orchestrator.memory import MemoryManager
 from orchestrator.oauth import SwiggyOAuthClient, verify_callback_params
@@ -72,36 +73,7 @@ async def get_orchestrator():
 #  Pages
 # ============================================================
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    auth_status = "Authenticated" if oauth_client.is_authenticated() else "Not Authenticated"
-    expiry = ""
-    if oauth_client.is_authenticated():
-        hours_left = oauth_client.time_until_expiry() / 3600
-        expiry = f" ({hours_left:.1f}h remaining)"
 
-    mcp_status = "Connected" if mcp_initialized else "Pending"
-    client_id_display = html_escape(oauth_client.client_id or "Not registered yet")
-
-    return f"""
-    <html>
-        <body style="font-family: system-ui, -apple-system, sans-serif; text-align: center; padding-top: 50px; background-color: #f7fafc;">
-            <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h1 style="color: #fc8019; margin-bottom: 5px;">Swiggy MCP Orchestrator</h1>
-                <p style="color: #718096; font-size: 16px;">AI-Powered Commerce Agent</p>
-                <div style="margin: 30px 0; padding: 15px; background: #edf2f7; border-radius: 8px; text-align: left;">
-                    <p style="margin: 5px 0;"><b>Server Status:</b> <span style="color: #38a169; font-weight: bold;">&#9679; Active</span></p>
-                    <p style="margin: 5px 0;"><b>Auth Status:</b> <span style="color: {'#38a169' if oauth_client.is_authenticated() else '#e53e3e'}; font-weight: bold;">{html_escape(auth_status)}{html_escape(expiry)}</span></p>
-                    <p style="margin: 5px 0;"><b>MCP Servers:</b> <span style="color: {'#38a169' if mcp_initialized else '#d69e2e'}; font-weight: bold;">{html_escape(mcp_status)}</span></p>
-                    <p style="margin: 5px 0;"><b>OAuth Callback:</b> <code>/oauth/callback</code></p>
-                    <p style="margin: 5px 0;"><b>Redirect URI:</b> <code>{html_escape(REDIRECT_URI)}</code></p>
-                    <p style="margin: 5px 0;"><b>Client ID:</b> <code>{client_id_display}</code></p>
-                </div>
-    {'                <p style="color: #38a169; font-weight: 600;">&#10003; Token active. Ready to accept queries.</p>' if oauth_client.is_authenticated() else '                <a href="/auth/start" style="display: inline-block; background-color: #fc8019; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 10px;">Connect Swiggy Account &#8594;</a>'}
-            </div>
-        </body>
-    </html>
-    """
 
 
 @app.get("/health")
@@ -362,6 +334,11 @@ async def shutdown():
             await mcp_client.close()
     logger.info("Orchestrator shutdown complete")
 
+
+# ============================================================
+#  Static Frontend
+# ============================================================
+app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
 
 # ============================================================
 #  Main

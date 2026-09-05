@@ -51,6 +51,9 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
         match = re.search(r'(?:search|find|need|buy|get|want)\s+(.+?)(?:\s*(?:near|for|please|on instamart)|$)', query.lower())
         search_query = match.group(1).strip() if match else query.lower()
 
+    # Strip conversational filler: 'me', 'some', 'a', 'an', 'need', 'buy'
+    search_query = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|need\s+|buy\s+|get\s+)+', '', search_query.strip(), flags=re.IGNORECASE).strip()
+
     if not search_query:
         search_query = "groceries"
 

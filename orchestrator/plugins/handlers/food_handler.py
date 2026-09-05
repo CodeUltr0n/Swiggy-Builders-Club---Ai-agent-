@@ -223,11 +223,12 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
 
     if router.llm:
         entities = await router._extract_entities(query, {
-            "search_query": "string or null — what food/cuisine/item user wants to find",
+            "search_query": "string or null — what food/cuisine/item user wants to find (e.g. 'sweets', 'biryani', 'pizza')",
             "restaurant_name": "string or null — specific restaurant name mentioned",
         })
         search_query = entities.get("search_query") or entities.get("restaurant_name") or ""
-    else:
+
+    if not search_query:
         match = re.search(
             r'(?:search for|find|get|show|want|crave|cravings for)\s+(.+?)(?:\s*(?:near|for|please)|$)',
             query.lower()
@@ -235,11 +236,26 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
         if match:
             search_query = match.group(1).strip()
 
-    generic = {"to eat something", "something to eat", "something", "food", "some food", "hungry", "eat", "anything", "me"}
-    if search_query.lower() in generic:
-        search_query = ""
+    # Strip conversational filler: 'me', 'some', 'a', 'an', 'good', 'best'
+    search_query = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|good\s+|best\s+)+', '', search_query.strip(), flags=re.IGNORECASE).strip()
 
-    # Search for matching open restaurants first
+    generic = {"to eat something", "something to eat", "something", "food", "some food", "hungry", "eat", "anything", "me", ""}
+    if search_query.lower() in generic:
+        q_lower = query.lower()
+        if any(w in q_lower for w in ["sweet", "mithai", "dessert", "halwa", "laddu", "gulab jamun", "cake", "pastry"]):
+            search_query = "sweets"
+        elif any(w in q_lower for w in ["biryani", "rice"]):
+            search_query = "biryani"
+        elif any(w in q_lower for w in ["pizza", "burger", "fast food"]):
+            search_query = "pizza"
+        else:
+            search_query = "food"
+
+    # Swiggy MCP strictly requires a non-empty query parameter
+    if not search_query:
+        search_query = "food"
+
+    # Search for matching open restaurants
     rest_res = await client.call_tool("food", "search_restaurants", {
         "addressId": address["id"], "query": search_query
     })
@@ -255,7 +271,7 @@ async def _search_restaurants(client, router, query, address, tool_logs, ranking
 
     # If specific query returned 0 restaurants, fetch open restaurants with broad queries
     if not restaurants:
-        for fallback_q in ["", "food", "sweets"]:
+        for fallback_q in ["sweets", "food", "restaurant"]:
             if fallback_q == search_query:
                 continue
             all_open_res = await client.call_tool("food", "search_restaurants", {

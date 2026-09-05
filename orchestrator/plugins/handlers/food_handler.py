@@ -168,18 +168,57 @@ def create_handler(client, router):
         query_lower = query.lower()
         address = context["resolved_address"]
 
-        # ---- Scenario 1: Track order ----
-        if any(w in query_lower for w in ["track", "status", "where is"]):
+        # ---- Scenario 1: Cart inquiry / view ----
+        if any(w in query_lower for w in ["cart", "basket", "where is the cart", "show cart", "view cart", "my cart"]) and not any(w in query_lower for w in ["add", "buy", "place"]):
+            return await _view_cart(client, router, address, tool_logs)
+
+        # ---- Scenario 2: Track order ----
+        if any(w in query_lower for w in ["track", "order status", "delivery status", "where is my", "where is the order"]):
             return await _track_order(client, router, address, tool_logs)
 
-        # ---- Scenario 2: Add to cart / Place order ----
-        if any(w in query_lower for w in ["add", "cart", "order", "place", "buy"]):
+        # ---- Scenario 3: Add to cart / Place order ----
+        if any(w in query_lower for w in ["add", "order", "place", "buy"]):
             return await _add_to_cart(client, router, query, address, tool_logs)
 
-        # ---- Scenario 3: Search / Browse (default for food) ----
+        # ---- Scenario 4: Search / Browse (default for food) ----
         return await _search_restaurants(client, router, query, address, tool_logs, rankings)
 
     return handle
+
+
+async def _view_cart(client, router, address, tool_logs):
+    cart_res = await client.call_tool("food", "get_food_cart", {"addressId": address.get("id", "")})
+    tool_logs.append({"tool": "get_food_cart", "args": {"addressId": address.get("id", "")}, "result": cart_res})
+
+    items = []
+    total = 0
+    if cart_res.get("success"):
+        c_data = cart_res.get("data", {})
+        if isinstance(c_data, dict):
+            items = c_data.get("items", [])
+            total = c_data.get("cartTotal") or c_data.get("total") or 0
+
+    if items:
+        item_lines = "\n".join([f"• **{it.get('name')}** x{it.get('quantity', 1)} — ₹{it.get('price', 0)}" for it in items])
+        text = (
+            f"🛒 **Your Swiggy Food Cart** ({len(items)} items):\n\n"
+            f"{item_lines}\n\n"
+            f"**To Pay**: ₹{total}\n\n"
+            f"💡 *Click the **[🛍️ Cart]** button in the top navigation bar or the floating bar below to open your cart drawer and checkout!*"
+        )
+    else:
+        text = (
+            f"🛒 **Your cart is currently empty.**\n\n"
+            f"• To add food or groceries, click **[+ ADD]** on any dish or product card.\n"
+            f"• You can open the cart drawer anytime by clicking the **[🛍️ Cart]** button in the top navigation bar (top-right next to Orders)."
+        )
+
+    return {
+        "response_text": text,
+        "tool_calls": tool_logs,
+        "active_server": "food",
+        "state": router.current_state,
+    }
 
 
 async def _track_order(client, router, address, tool_logs):

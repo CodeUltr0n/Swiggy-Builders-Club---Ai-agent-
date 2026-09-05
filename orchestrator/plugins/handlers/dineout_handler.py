@@ -23,10 +23,24 @@ def create_handler(client, router):
     async def handle(query: str, context: Dict[str, Any], tool_logs: List[Dict[str, Any]], rankings: list) -> Dict[str, Any]:
         query_lower = query.lower()
 
-        # ---- Check booking status first ----
-        if any(w in query_lower for w in ["booking", "status", "track", "where"]):
-            return await _booking_status(client, router, tool_logs)
+        # ---- Cart inquiry redirection ----
+        if any(w in query_lower for w in ["cart", "basket"]):
+            return {
+                "response_text": (
+                    "🍽️ **Dineout is for restaurant table bookings and dining out**, which don't use a delivery cart!\n\n"
+                    "• To book a table, click **[Book Table]** on any restaurant card below.\n"
+                    "• To view your delivery cart for Food or Instamart, click the **[🛍️ Cart]** button in the top navigation bar (top-right next to Orders)."
+                ),
+                "tool_calls": tool_logs,
+                "active_server": "dineout",
+                "state": router.current_state,
+            }
 
+        # ---- Check booking status ----
+        if any(w in query_lower for w in ["booking status", "my booking", "track booking", "table status", "reservation status"]) or (
+            "status" in query_lower and any(w in query_lower for w in ["booking", "table", "reservation"])
+        ):
+            return await _booking_status(client, router, tool_logs)
 
         # ---- Book table ----
         if any(w in query_lower for w in ["book", "table", "reserve"]):

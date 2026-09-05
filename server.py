@@ -517,6 +517,51 @@ async def mcp_status():
     }
 
 
+# ============================================================
+#  Address Management Endpoints
+# ============================================================
+
+@app.get("/addresses")
+async def get_saved_addresses():
+    """Return all saved addresses for the authenticated user."""
+    if not oauth_client.is_authenticated():
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    orch = await get_orchestrator()
+    mcp = getattr(orch, 'mcp_client', None)
+    if not mcp:
+        return JSONResponse({"error": "MCP client not available"}, status_code=500)
+    try:
+        res = await mcp.call_tool("food", "get_addresses", {})
+        return res
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/addresses/cleanup-test-addresses")
+async def cleanup_test_addresses():
+    """Delete the auto-provisioned test addresses, keeping the user's real personal address."""
+    if not oauth_client.is_authenticated():
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    orch = await get_orchestrator()
+    mcp = getattr(orch, 'mcp_client', None)
+    if not mcp:
+        return JSONResponse({"error": "MCP client not available"}, status_code=500)
+
+    test_ids = [
+        "dae65u41d96qgoptaaj0",
+        "dae65gc1d96hodb5lis0",
+        "dae63841d96kg2tnupkg",
+        "dae5u141d96h4au5em50",
+        "dae5tus1d96mu97c8ivg",
+    ]
+    results = {}
+    for tid in test_ids:
+        try:
+            r = await mcp.call_tool("food", "delete_address", {"addressId": tid})
+            results[tid] = r
+        except Exception as e:
+            results[tid] = {"error": str(e)}
+    return results
 
 
 # ============================================================

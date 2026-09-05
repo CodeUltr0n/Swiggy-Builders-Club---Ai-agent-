@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Server, Shield } from 'lucide-react';
+import { Server, Shield, MapPin } from 'lucide-react';
 
 export default function StatusPanel() {
   const [servers, setServers] = useState({
@@ -7,8 +7,24 @@ export default function StatusPanel() {
     instamart: 'pending',
     dineout: 'pending'
   });
+  const [currentLocation, setCurrentLocation] = useState('VIT-AP University, Amaravati');
 
   useEffect(() => {
+    // Fetch real saved addresses from Swiggy
+    fetch('/addresses')
+      .then(res => res.json())
+      .then(data => {
+        const list = data?.data?.addresses || data?.addresses || [];
+        const vitAddr = list.find(a => (a.addressLine || '').toLowerCase().includes('vit') || (a.addressLine || '').toLowerCase().includes('amaravati'));
+        if (vitAddr) {
+          setCurrentLocation('VIT-AP University, Amaravati');
+        } else if (list.length > 0) {
+          const first = list[0];
+          setCurrentLocation(first.label || first.addressCategory || 'Home');
+        }
+      })
+      .catch(() => {});
+
     // Poll MCP status every 5s
     const fetchStatus = async () => {
       try {
@@ -44,13 +60,20 @@ export default function StatusPanel() {
         SWIGGY MCP CONTROL PLANE
       </div>
       
-      <div className="mcp-status-group">
-        {Object.entries(servers).map(([name, status]) => (
-          <div key={name} className="mcp-status-item">
-            <div className={`status-dot ${getStatusClass(status)}`}></div>
-            <span style={{ textTransform: 'capitalize' }}>{name}</span>
-          </div>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div className="location-pill" title="User active Swiggy delivery location">
+          <MapPin size={13} color="#ea580c" />
+          <span>{currentLocation}</span>
+        </div>
+
+        <div className="mcp-status-group">
+          {Object.entries(servers).map(([name, status]) => (
+            <div key={name} className="mcp-status-item">
+              <div className={`status-dot ${getStatusClass(status)}`}></div>
+              <span style={{ textTransform: 'capitalize' }}>{name}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

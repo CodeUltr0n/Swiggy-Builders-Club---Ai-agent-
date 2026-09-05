@@ -370,10 +370,42 @@ class OrchestratorRouter:
                 "rankings": rankings,
             }
 
-        selected = next(
-            (a for a in addresses if a.get("id") == context.get("address_id")),
-            addresses[0],
-        )
+        # Smart address selection:
+        # 1. If context['address_id'] is specified, use that exact address
+        # 2. If query asks for a specific locality (e.g. "indiranagar", "bangalore", "vit", "amaravati"), match it
+        # 3. Otherwise, prioritize user's genuine personal address (Vit-AP University / Ketan Chokkara)
+        query_l = query.lower()
+        selected = None
+        if context.get("address_id"):
+            selected = next((a for a in addresses if a.get("id") == context.get("address_id")), None)
+
+        if not selected:
+            for a in addresses:
+                line = (a.get("addressLine", "") + " " + a.get("city", "") + " " + a.get("label", "")).lower()
+                if "indiranagar" in query_l and "indiranagar" in line:
+                    selected = a
+                    break
+                elif ("vit" in query_l or "amaravati" in query_l or "university" in query_l) and ("vit" in line or "amaravati" in line):
+                    selected = a
+                    break
+
+        if not selected:
+            def is_user_home(a):
+                line = (a.get("addressLine", "") + " " + a.get("fullAddress", "")).lower()
+                name = (a.get("userName", "")).lower()
+                return "vit" in line or "amaravati" in line or "ketan" in name
+
+            user_home = next((a for a in addresses if is_user_home(a)), None)
+            selected = user_home if user_home else addresses[0]
+
+        # Give a human-readable label if pointing to university
+        if selected:
+            s_line = (selected.get("addressLine") or "").lower()
+            if "vit" in s_line or "amaravati" in s_line:
+                selected["label"] = "VIT-AP University, Amaravati"
+            elif "indiranagar" in s_line:
+                selected["label"] = "Indiranagar, Bengaluru"
+
         context["resolved_address"] = selected
 
         # 4. Route to registered handler

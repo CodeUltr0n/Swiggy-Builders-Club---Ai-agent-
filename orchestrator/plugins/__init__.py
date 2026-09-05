@@ -18,7 +18,7 @@ class BasePlugin:
         Otherwise, routes to real Swiggy MCP server via the real_client.
         """
         # Tools that are ALWAYS handled locally by the orchestrator (SQLite)
-        LOCAL_TOOLS = {"get_addresses", "get_food_orders", "get_orders", "get_food_order_details"}
+        LOCAL_TOOLS = {"get_food_orders", "get_orders", "get_food_order_details"}
 
         if mode == "simulation" or tool_name in LOCAL_TOOLS:
             sim_handler = getattr(self, f"sim_{tool_name}", None)

@@ -7,7 +7,7 @@ export default function StatusPanel() {
     instamart: 'pending',
     dineout: 'pending'
   });
-  const [currentLocation, setCurrentLocation] = useState('VIT-AP University, Amaravati');
+  const [currentLocation, setCurrentLocation] = useState('Locating...');
 
   useEffect(() => {
     // Fetch real saved addresses from Swiggy
@@ -15,15 +15,23 @@ export default function StatusPanel() {
       .then(res => res.json())
       .then(data => {
         const list = data?.data?.addresses || data?.addresses || [];
-        const vitAddr = list.find(a => (a.addressLine || '').toLowerCase().includes('vit') || (a.addressLine || '').toLowerCase().includes('amaravati'));
-        if (vitAddr) {
-          setCurrentLocation('VIT-AP University, Amaravati');
-        } else if (list.length > 0) {
+        if (list.length > 0) {
           const first = list[0];
-          setCurrentLocation(first.label || first.addressCategory || 'Home');
+          const line = first.addressLine || first.fullAddress || '';
+          if (line.toLowerCase().includes('vit') || line.toLowerCase().includes('amaravati')) {
+            setCurrentLocation('VIT-AP University, Amaravati');
+          } else {
+            const parts = line.split(',').map(s => s.trim()).filter(Boolean);
+            const shortAddr = parts.length > 1 ? `${parts[0]}, ${parts[1]}` : (parts[0] || first.label || first.addressCategory || 'Saved Address');
+            setCurrentLocation(shortAddr);
+          }
+        } else {
+          setCurrentLocation('No address saved');
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setCurrentLocation('Saved Address');
+      });
 
     // Poll MCP status every 5s
     const fetchStatus = async () => {

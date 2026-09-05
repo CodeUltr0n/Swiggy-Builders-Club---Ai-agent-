@@ -324,13 +324,15 @@ async def _track_order(client, router, tool_logs):
         orders_list = data if isinstance(data, list) else (data.get("orders", []) if isinstance(data, dict) else [])
         if orders_list:
             latest = orders_list[0]
-            order_id = latest.get("orderId") or latest.get("id")
+            addr = context.get("resolved_address", {})
+            lat = addr.get("latitude", 16.5062)
+            lng = addr.get("longitude", 80.6480)
             track_res = await client.call_tool("instamart", "track_order", {
                 "orderId": order_id,
-                "lat": 12.9784,
-                "lng": 77.6408,
+                "lat": lat,
+                "lng": lng,
             })
-            tool_logs.append({"tool": "track_order", "args": {"orderId": order_id, "lat": 12.9784, "lng": 77.6408}, "result": track_res})
+            tool_logs.append({"tool": "track_order", "args": {"orderId": order_id, "lat": lat, "lng": lng}, "result": track_res})
 
             if track_res.get("success"):
                 d = track_res["data"] if isinstance(track_res.get("data"), dict) else {}

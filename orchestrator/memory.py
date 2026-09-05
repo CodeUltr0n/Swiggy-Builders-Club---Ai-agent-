@@ -51,49 +51,17 @@ class MemoryManager:
             
             conn.commit()
             
-            # Seed default addresses if empty
-            cursor.execute("SELECT COUNT(*) FROM addresses")
-            if cursor.fetchone()[0] == 0:
-                self.seed_default_data()
+            # Purge any legacy mock seeds from development
+            cursor.execute("DELETE FROM addresses WHERE id LIKE 'addr_home_%' OR id LIKE 'addr_office_%' OR id LIKE 'addr_other_%'")
+            cursor.execute("DELETE FROM orders WHERE id LIKE 'ord_food_%' OR id LIKE 'ord_im_%' OR id LIKE 'ord_dine_%'")
+            conn.commit()
 
             # Clean up abandoned data periodically (on initialization)
             self.purge_abandoned_orders()
 
     def seed_default_data(self):
-        default_addresses = [
-            ("addr_home_001", "Home", "Flat 402, Signature Residency, Indiranagar, Bengaluru", 12.9716, 77.5946),
-            ("addr_office_002", "Office", "Embassy TechVillage, Bellandur, Bengaluru", 12.9279, 77.6811),
-            ("addr_other_003", "Gym", "Cult Fit, HSR Layout, Bengaluru", 12.9116, 77.6389)
-        ]
-        default_orders = [
-            ("ord_food_001", "food", "Meghana Foods", json.dumps([{"name": "Special Chicken Biryani", "quantity": 1, "price": 320.0}]), 320.0, "DELIVERED"),
-            ("ord_im_001", "instamart", "Instamart Store", json.dumps([{"name": "Milk & Eggs", "quantity": 1, "price": 65.0}]), 65.0, "DELIVERED"),
-            ("ord_dine_001", "dineout", "Truffles", json.dumps([{"title": "Free Reservation for 2", "guests": 2}]), 0.0, "CONFIRMED"),
-        ]
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            for addr in default_addresses:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO addresses (id, label, display_text, latitude, longitude)
-                    VALUES (?, ?, ?, ?, ?)
-                """, addr)
-            for ord_item in default_orders:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO orders (id, server, merchant_name, items, total_amount, status)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, ord_item)
-
-            default_prefs = [
-                ("dietary_preference", "Non-Veg"),
-                ("preferred_payment_method", "COD"),
-            ]
-            for pref_k, pref_v in default_prefs:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO preferences (key, value)
-                    VALUES (?, ?)
-                """, (pref_k, json.dumps(pref_v)))
-
-            conn.commit()
+        """No-op: Mock seed data disabled for real production operation."""
+        pass
 
     # Address operations
     def save_address(self, id: str, label: str, display_text: str, lat: float, lng: float):

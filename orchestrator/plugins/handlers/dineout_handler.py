@@ -158,8 +158,11 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
     if not search_query or search_query.lower() in ["dineout", "restaurants", "dining", "table"]:
         search_query = "dining"
 
-    lat = context.get("resolved_address", {}).get("latitude", 12.9784) or 12.9784
-    lng = context.get("resolved_address", {}).get("longitude", 77.6408) or 77.6408
+    lat = context.get("resolved_address", {}).get("latitude")
+    lng = context.get("resolved_address", {}).get("longitude")
+    if not lat or not lng:
+        from orchestrator.router import resolve_lat_lng
+        lat, lng = resolve_lat_lng(context.get("resolved_address", {}))
     addr_id = context.get("resolved_address", {}).get("id")
 
     search_args = {
@@ -271,8 +274,11 @@ async def _search_restaurants(client, router, query, context, tool_logs, ranking
 
 async def _book_table(client, router, query, context, tool_logs):
     """Book a table. Extracts guest count, time, date, restaurant name."""
-    lat = context.get("resolved_address", {}).get("latitude", 12.9784) or 12.9784
-    lng = context.get("resolved_address", {}).get("longitude", 77.6408) or 77.6408
+    lat = context.get("resolved_address", {}).get("latitude")
+    lng = context.get("resolved_address", {}).get("longitude")
+    if not lat or not lng:
+        from orchestrator.router import resolve_lat_lng
+        lat, lng = resolve_lat_lng(context.get("resolved_address", {}))
 
     rest_id = None
     guests = 2

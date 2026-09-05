@@ -15,6 +15,7 @@ def temp_db():
     temp_dir = tempfile.mkdtemp()
     db_path = os.path.join(temp_dir, "test_orchestrator.db")
     memory = MemoryManager(db_path)
+    memory.save_address("addr_home_001", "Home", "Flat 101, Test Lane", 16.5062, 80.6480)
     yield memory
     shutil.rmtree(temp_dir)
 

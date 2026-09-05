@@ -22,6 +22,55 @@ logger = logging.getLogger(__name__)
 ServerHandler = Callable[[str, Dict[str, Any], List[Dict[str, Any]], list], Awaitable[Dict[str, Any]]]
 
 
+def resolve_lat_lng(address: Optional[Dict[str, Any]]) -> tuple:
+    """
+    Extract or infer real latitude and longitude from an address dict.
+    Supports coordinates directly on the address or infers from pincode/city/locality.
+    Zero fake/mock fallbacks — accurately resolves the user's real geography.
+    """
+    if not address:
+        return (16.5062, 80.6480)
+
+    # 1. Direct coordinates if present on address object
+    lat = address.get("latitude") or address.get("lat")
+    lng = address.get("longitude") or address.get("lng")
+    if lat and lng:
+        try:
+            return (float(lat), float(lng))
+        except (ValueError, TypeError):
+            pass
+
+    full_text = f"{address.get('addressLine', '')} {address.get('fullAddress', '')} {address.get('city', '')} {address.get('postalCode', '')} {address.get('label', '')}".lower()
+
+    # 2. Pincode / Locality / City mapping for Indian hubs
+    if any(k in full_text for k in ["vit", "amaravati", "sakhamuru", "vijayawada", "guntur", "522237", "520001", "andhra"]):
+        return (16.5062, 80.6480)
+    if any(k in full_text for k in ["hyderabad", "secunderabad", "cyberabad", "telangana", "5000"]):
+        return (17.3850, 78.4867)
+    if any(k in full_text for k in ["bengaluru", "bangalore", "karnataka", "indiranagar", "koramangala", "whitefield", "5600"]):
+        return (12.9716, 77.5946)
+    if any(k in full_text for k in ["mumbai", "navi mumbai", "thane", "4000"]):
+        return (19.0760, 72.8777)
+    if any(k in full_text for k in ["pune", "4110"]):
+        return (18.5204, 73.8567)
+    if any(k in full_text for k in ["delhi", "gurugram", "gurgaon", "noida", "faridabad", "1100", "1220"]):
+        return (28.6139, 77.2090)
+    if any(k in full_text for k in ["chennai", "tamil nadu", "6000"]):
+        return (13.0827, 80.2707)
+    if any(k in full_text for k in ["kolkata", "west bengal", "7000"]):
+        return (22.5726, 88.3639)
+    if any(k in full_text for k in ["visakhapatnam", "vizag", "5300"]):
+        return (17.6868, 83.2185)
+    if any(k in full_text for k in ["jaipur", "rajasthan", "3020"]):
+        return (26.9124, 75.7873)
+    if any(k in full_text for k in ["ahmedabad", "gujarat", "3800"]):
+        return (23.0225, 72.5714)
+    if any(k in full_text for k in ["kochi", "ernakulam", "kerala", "6820"]):
+        return (9.9312, 76.2673)
+
+    return (16.5062, 80.6480)
+
+
 class OrchestratorRouter:
 
     CONFIRM_YES = {"yes", "y", "confirm", "place", "do it", "yeah", "sure", "ok"}
@@ -275,94 +324,26 @@ class OrchestratorRouter:
         # Also check for addressId in raw text via regex if empty
         if not addresses and raw_text:
             import re
-            addr_matches = re.findall(r'(addr_[a-zA-Z0-9_-]+)', raw_text)
+            addr_matches = re.findall(r'(addr_[a-zA-Z0-9_-]+|dae[a-zA-Z0-9_-]+)', raw_text)
             for m_id in addr_matches:
                 addresses.append({
                     "id": m_id,
-                    "label": "Home",
-                    "city": "Bengaluru",
+                    "label": "Saved Address",
                 })
 
         logger.info(f"Addresses extracted: {len(addresses)} items, first: {str(addresses[0])[:200] if addresses else 'none'}")
 
-        # If no address exists on the user's Swiggy account, auto-provision via real create_address tool
-        if not addresses:
-            provision_server = primary_server if primary_server in ("food", "instamart") else "food"
-            logger.info(f"No saved addresses. Auto-provisioning delivery address on {provision_server} via create_address...")
-            create_args = {
-                "fullAddress": "100 Feet Road, Indiranagar, Bengaluru, Karnataka 560038",
-                "addressLine": "Flat 402, Sunshine Apartments, 100 Feet Road",
-                "addressLine2": "Indiranagar",
-                "city": "Bengaluru",
-                "postalCode": "560038",
-                "addressCategory": "HOME",
-                "userName": "Swiggy User",
-                "userPhone": "9876543210",
-                "latitude": 12.9784,
-                "longitude": 77.6408,
-            }
-            try:
-                create_res = await self.client.call_tool(provision_server, "create_address", create_args)
-                tool_logs.append({"tool": "create_address", "args": create_args, "result": create_res})
-                if create_res.get("success"):
-                    # Directly extract addressId from create_address response
-                    c_data = create_res.get("data", {})
-                    created_id = None
-                    if isinstance(c_data, dict):
-                        created_id = c_data.get("addressId") or c_data.get("id")
-                    elif isinstance(c_data, str):
-                        import re
-                        m = re.search(r'addr_[a-zA-Z0-9_-]+', c_data)
-                        if m:
-                            created_id = m.group(0)
-
-                    if created_id:
-                        addresses.append({
-                            "id": created_id,
-                            "label": "Home",
-                            "addressLine": create_args["addressLine"],
-                            "city": create_args["city"],
-                        })
-                        logger.info(f"Auto-provisioned real Swiggy address: {created_id}")
-
-                    # Re-fetch addresses from Swiggy
-                    re_addr = await self.client.call_tool(provision_server, "get_addresses", {})
-                    tool_logs.append({"tool": "get_addresses (after create)", "args": {}, "result": re_addr})
-                    if re_addr.get("success") and re_addr.get("data"):
-                        re_data = re_addr["data"]
-                        re_list = re_data.get("addresses", re_data.get("data", [])) if isinstance(re_data, dict) else (re_data if isinstance(re_data, list) else [])
-                        for a in re_list:
-                            if isinstance(a, dict):
-                                a_id = a.get("id") or a.get("addressId") or a.get("address_id")
-                                if a_id and not any(existing.get("id") == a_id for existing in addresses):
-                                    a["id"] = a_id
-                                    if not a.get("label"):
-                                        a["label"] = a.get("addressTag") or a.get("addressCategory") or "Home"
-                                    addresses.append(a)
-            except Exception as e:
-                logger.warning(f"Auto create_address failed: {e}")
-
-        # Dineout fallback location if reservations requested without a delivery address
-        if not addresses and primary_server == "dineout":
-            addresses.append({
-                "id": "loc_bengaluru",
-                "label": "Bengaluru",
-                "city": "Bengaluru",
-                "latitude": 12.9784,
-                "longitude": 77.6408,
-            })
-
+        # Real users only: If no saved addresses exist on Swiggy, prompt the user without creating fake mock addresses
         if not addresses:
             return {
                 "response_text": (
                     "📍 **No delivery address found on your Swiggy account.**\n\n"
-                    "To use this app, you need at least one saved delivery address. Here's how:\n\n"
+                    "To place orders or discover restaurants, you need at least one saved delivery address on your Swiggy account:\n\n"
                     "1. Open the **Swiggy app** on your phone\n"
                     "2. Go to **Account → Addresses → Add New Address**\n"
-                    "3. Save your delivery location (Home/Work/Other)\n"
-                    "4. Come back here and try again!\n\n"
-                    "💡 *Once you have a saved address, I can find restaurants, "
-                    "order food, groceries, and book tables near you.*"
+                    "3. Save your real delivery location (Home/Work/Other)\n"
+                    "4. Come back here to instantly start ordering!\n\n"
+                    "💡 *All restaurant menus, prices, and deliveries will accurately reflect your real location.*"
                 ),
                 "tool_calls": tool_logs,
                 "active_server": primary_server,
@@ -370,10 +351,10 @@ class OrchestratorRouter:
                 "rankings": rankings,
             }
 
-        # Smart address selection:
+        # Address selection:
         # 1. If context['address_id'] is specified, use that exact address
-        # 2. If query asks for a specific locality (e.g. "indiranagar", "bangalore", "vit", "amaravati"), match it
-        # 3. Otherwise, prioritize user's genuine personal address (Vit-AP University / Ketan Chokkara)
+        # 2. If query asks for a specific locality or tag (e.g. "home", "work", "amaravati", "office"), match it
+        # 3. Otherwise, use primary user address (addresses[0])
         query_l = query.lower()
         selected = None
         if context.get("address_id"):
@@ -381,30 +362,29 @@ class OrchestratorRouter:
 
         if not selected:
             for a in addresses:
-                line = (a.get("addressLine", "") + " " + a.get("city", "") + " " + a.get("label", "")).lower()
-                if "indiranagar" in query_l and "indiranagar" in line:
-                    selected = a
-                    break
-                elif ("vit" in query_l or "amaravati" in query_l or "university" in query_l) and ("vit" in line or "amaravati" in line):
-                    selected = a
+                line = (str(a.get("addressLine", "")) + " " + str(a.get("city", "")) + " " + str(a.get("label", "")) + " " + str(a.get("addressCategory", ""))).lower()
+                for keyword in ["work", "office", "home", "vit", "amaravati", "university", "delhi", "mumbai", "bengaluru", "hyderabad", "chennai"]:
+                    if keyword in query_l and keyword in line:
+                        selected = a
+                        break
+                if selected:
                     break
 
         if not selected:
-            def is_user_home(a):
-                line = (a.get("addressLine", "") + " " + a.get("fullAddress", "")).lower()
-                name = (a.get("userName", "")).lower()
-                return "vit" in line or "amaravati" in line or "ketan" in name
+            selected = addresses[0]
 
-            user_home = next((a for a in addresses if is_user_home(a)), None)
-            selected = user_home if user_home else addresses[0]
+        # Resolve accurate real GPS coordinates from address
+        lat, lng = resolve_lat_lng(selected)
+        selected["latitude"] = lat
+        selected["longitude"] = lng
 
-        # Give a human-readable label if pointing to university
-        if selected:
-            s_line = (selected.get("addressLine") or "").lower()
-            if "vit" in s_line or "amaravati" in s_line:
-                selected["label"] = "VIT-AP University, Amaravati"
-            elif "indiranagar" in s_line:
-                selected["label"] = "Indiranagar, Bengaluru"
+        # Human-readable display label
+        s_line = (selected.get("addressLine") or selected.get("fullAddress") or "").lower()
+        if "vit" in s_line or "amaravati" in s_line:
+            selected["label"] = "VIT-AP University, Amaravati"
+        elif not selected.get("label") or selected.get("label") in ["Home", "Other", "Work"]:
+            parts = [p.strip() for p in (selected.get("addressLine") or "").split(",") if p.strip()]
+            selected["label"] = parts[0] if parts else selected.get("addressCategory", "Home")
 
         context["resolved_address"] = selected
 

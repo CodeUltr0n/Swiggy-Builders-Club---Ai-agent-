@@ -2,7 +2,7 @@
 // Allows Swiggy AI to talk to users, introduce itself, and answer questions
 // without inappropriately dumping 171 dishes or triggering Food MCP on greetings.
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "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";
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 const GROQ_MODEL = import.meta.env.VITE_GROQ_MODEL || "qwen/qwen3.6-27b";
 
 // Definite action keywords that mean the user wants food, groceries, or table reservations
@@ -106,6 +106,11 @@ Tone & Style Guidelines:
     userMsg += `\n(User delivery location: ${activeLocation.locality || activeLocation.city})`;
   }
 
+  // If no Groq API key is configured in env, return the friendly introduction immediately
+  if (!GROQ_API_KEY) {
+    return getFallbackResponse();
+  }
+
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -147,6 +152,13 @@ Tone & Style Guidelines:
   }
 
   // Graceful fallback response
+  return getFallbackResponse();
+}
+
+/**
+ * Return warm standard Swiggy AI introduction.
+ */
+export function getFallbackResponse() {
   return `Hello! 👋 I am **Swiggy AI**, your personal assistant for all things food, groceries, and dining.
 
 Here is what I can help you with:
@@ -157,3 +169,4 @@ Here is what I can help you with:
 
 What would you like to explore or order today? 😋`;
 }
+

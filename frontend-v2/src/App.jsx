@@ -20,30 +20,16 @@ export default function App() {
   const messagesListRef = useRef(null);
 
   useEffect(() => {
-    const isGuest = (() => {
-      try { return localStorage.getItem('swiggy_guest_preview') === 'true'; } catch { return false; }
-    })();
-
     // Check real auth status on load
     fetch('/auth/status')
       .then(res => res.json())
       .then(data => {
+        setIsAuthenticated(data.authenticated);
         if (data.authenticated) {
-          setIsAuthenticated(true);
           fetchCart();
-        } else if (isGuest) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
         }
       })
-      .catch(() => {
-        if (isGuest) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-        }
-      });
+      .catch(() => setIsAuthenticated(false));
   }, []);
 
   const fetchCart = async () => {
@@ -339,17 +325,6 @@ export default function App() {
             <span>Connect Swiggy Account</span>
             <ArrowRight size={17} />
           </a>
-
-          <button 
-            type="button" 
-            onClick={() => {
-              setIsAuthenticated(true);
-              try { localStorage.setItem('swiggy_guest_preview', 'true'); } catch {}
-            }} 
-            className="auth-guest-btn"
-          >
-            <span>Continue as Guest (Preview UI) →</span>
-          </button>
 
           <div className="auth-footer-credits">
             Powered by <span className="credit-highlight-orange">Swiggy MCP</span> &bull; Developed by{' '}

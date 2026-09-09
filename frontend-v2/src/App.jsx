@@ -7,7 +7,7 @@ import CartDrawer from './components/CartDrawer';
 import OrdersDrawer from './components/OrdersDrawer';
 import BottomNav from './components/BottomNav';
 import { isConversationalOrQuestion, fetchGroqChat } from './services/groqChat';
-import { Send, Terminal } from 'lucide-react';
+import { Send, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -20,16 +20,30 @@ export default function App() {
   const messagesListRef = useRef(null);
 
   useEffect(() => {
+    const isGuest = (() => {
+      try { return localStorage.getItem('swiggy_guest_preview') === 'true'; } catch { return false; }
+    })();
+
     // Check real auth status on load
     fetch('/auth/status')
       .then(res => res.json())
       .then(data => {
-        setIsAuthenticated(data.authenticated);
         if (data.authenticated) {
+          setIsAuthenticated(true);
           fetchCart();
+        } else if (isGuest) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
         }
       })
-      .catch(() => setIsAuthenticated(false));
+      .catch(() => {
+        if (isGuest) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      });
   }, []);
 
   const fetchCart = async () => {
@@ -286,29 +300,67 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
+    const apiBase = import.meta.env.VITE_API_BASE || '';
+    const authStartUrl = apiBase ? `${apiBase}/auth/start` : '/auth/start';
+
     return (
-      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
+      <div className="auth-card-container">
         <AnimatedGlassBackground />
-        <div className="control-plane-card" style={{ maxWidth: '400px', textAlign: 'center' }}>
-          <Terminal size={48} className="text-orange" style={{ margin: '0 auto 20px' }} />
-          <h1 style={{ marginBottom: '10px' }}>Swiggy AI Control Plane</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '30px', lineHeight: '1.5' }}>
-            Connect your account to initialize the orchestration layer. Experience seamless, context-aware routing across Swiggy Food, Instamart, and Dineout.
+        <div className="auth-glass-card">
+          <img src="/swiggy_avatar.png" alt="Swiggy AI" className="auth-logo" />
+          <div className="auth-badge">
+            <Sparkles size={13} color="#fb923c" />
+            <span>Autonomous MCP Router</span>
+          </div>
+          <h1 className="auth-title">Swiggy AI Control Plane</h1>
+          <p className="auth-desc">
+            Connect your account to initialize intelligent, context-aware orchestration across Swiggy's full ecosystem.
           </p>
-          <a 
-            href="/auth/start" 
-            style={{ 
-              display: 'inline-block', 
-              backgroundColor: 'var(--orange-primary)', 
-              color: 'white', 
-              padding: '12px 24px', 
-              borderRadius: '6px', 
-              textDecoration: 'none',
-              fontWeight: 'bold'
-            }}
-          >
-            Connect Swiggy Account
+
+          <div className="auth-services-row">
+            <div className="auth-service-chip">
+              <span className="chip-emoji">🍔</span>
+              <span className="chip-name">Food MCP</span>
+              <span className="chip-sub">Dishes & Menus</span>
+            </div>
+            <div className="auth-service-chip">
+              <span className="chip-emoji">🛒</span>
+              <span className="chip-name">Instamart</span>
+              <span className="chip-sub">10-Min Delivery</span>
+            </div>
+            <div className="auth-service-chip">
+              <span className="chip-emoji">🍽️</span>
+              <span className="chip-name">Dineout</span>
+              <span className="chip-sub">Table Booking</span>
+            </div>
+          </div>
+
+          <a href={authStartUrl} className="auth-connect-btn">
+            <span>Connect Swiggy Account</span>
+            <ArrowRight size={17} />
           </a>
+
+          <button 
+            type="button" 
+            onClick={() => {
+              setIsAuthenticated(true);
+              try { localStorage.setItem('swiggy_guest_preview', 'true'); } catch {}
+            }} 
+            className="auth-guest-btn"
+          >
+            <span>Continue as Guest (Preview UI) →</span>
+          </button>
+
+          <div className="auth-footer-credits">
+            Powered by <span className="credit-highlight-orange">Swiggy MCP</span> &bull; Developed by{' '}
+            <a 
+              href="https://www.linkedin.com/in/ketan-chokkara-2888b2274" 
+              target="_blank" 
+              rel="noopener noreferrer"
+            >
+              Ketan Chokkara
+            </a>
+          </div>
         </div>
       </div>
     );

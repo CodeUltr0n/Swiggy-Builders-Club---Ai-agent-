@@ -3376,3 +3376,174 @@ button, a, input, [role="button"], [role="tab"], .btn, .card-btn, .entity-card, 
   from { opacity: 0; transform: translateY(15px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Auth Landing Glass Card */
+.auth-card-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  position: relative;
+  z-index: 10;
+}
+
+.auth-glass-card {
+  max-width: 440px;
+  width: 100%;
+  text-align: center;
+  background: rgba(22, 21, 30, 0.76);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1.5px solid rgba(252, 128, 25, 0.35);
+  border-radius: 28px;
+  padding: 36px 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(252, 128, 25, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  animation: fadeInScale 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.auth-logo {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 16px;
+  display: block;
+  filter: drop-shadow(0 0 20px rgba(252, 128, 25, 0.5));
+  animation: floatEmptyLogo 3.2s ease-in-out infinite;
+}
+
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  background: rgba(252, 128, 25, 0.12);
+  border: 1px solid rgba(252, 128, 25, 0.3);
+  color: #fb923c;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.auth-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 10px;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #ffffff 40%, rgba(255, 255, 255, 0.75) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.auth-desc {
+  font-size: 0.92rem;
+  color: rgba(240, 253, 244, 0.75);
+  line-height: 1.55;
+  margin-bottom: 24px;
+}
+
+.auth-services-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.auth-service-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.auth-service-chip .chip-emoji {
+  font-size: 18px;
+}
+
+.auth-service-chip .chip-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.auth-service-chip .chip-sub {
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.auth-connect-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #fc8019 0%, #e66a07 100%);
+  color: #ffffff;
+  border-radius: 14px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 8px 24px rgba(252, 128, 25, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.auth-connect-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(252, 128, 25, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  filter: brightness(1.05);
+}
+
+.auth-guest-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(240, 253, 244, 0.85);
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.auth-guest-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.auth-footer-credits {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.2px;
+}
+
+.auth-footer-credits a {
+  color: #fb923c;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.auth-footer-credits a:hover {
+  color: #fdba74;
+  text-decoration: underline;
+}
+

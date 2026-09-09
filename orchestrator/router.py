@@ -264,6 +264,94 @@ class OrchestratorRouter:
         }
 
 
+    def _is_conversational_query(self, query: str) -> bool:
+        """
+        Detect if query is a greeting, agent identity question, or conversational inquiry
+        rather than an explicit food/grocery order or menu search request.
+        """
+        import re
+        q = query.strip().lower()
+        q_clean = re.sub(r'[^\w\s]', '', q).strip()
+
+        # Action keywords that definitely mean the user wants food/groceries/tables
+        action_kw = {
+            "order", "buy", "cart", "track", "biryani", "pizza", "burger", "food",
+            "sweet", "sweets", "dessert", "cake", "ice cream", "milk", "eggs", "bread",
+            "grocery", "groceries", "table", "reserve", "dineout", "instamart", "restaurant",
+            "menu", "crave", "craving", "hungry", "dish", "dishes", "add", "checkout"
+        }
+        words = set(re.findall(r'\w+', q_clean))
+        if words & action_kw:
+            return False
+
+        # Obvious greetings
+        greetings = {
+            "hi", "hello", "hey", "hola", "namaste", "sup", "yo", "howdy",
+            "good morning", "good afternoon", "good evening", "good night", "greetings"
+        }
+        if q_clean in greetings:
+            return True
+
+        # Identity & capabilities inquiries
+        identity_phrases = [
+            "who are you", "what are you", "what can you do", "introduce yourself",
+            "tell me about yourself", "what is your name", "who made you", "what is swiggy ai",
+            "what do you do", "how can you help", "how do you work", "what are your features",
+            "what services do you have", "help", "help me", "support", "how to use"
+        ]
+        if any(ip in q_clean for ip in identity_phrases):
+            return True
+
+        # Conversational pleasantries
+        pleasantries = {
+            "thank you", "thanks", "thanks a lot", "thank you so much", "bye", "goodbye",
+            "see you", "nice to meet you", "how are you", "how are you doing", "whats up"
+        }
+        if q_clean in pleasantries:
+            return True
+
+        # Short queries without action keywords (e.g. "hey there", "swiggy")
+        if len(words) <= 2 and not (words & action_kw):
+            if any(w in greetings for w in words) or "swiggy" in words:
+                return True
+
+        return False
+
+    async def _handle_conversation(self, query: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a conversational response using the Groq LLM without invoking MCP tools."""
+        if self.llm:
+            try:
+                ai_text = await self.llm.chat(query, context=context)
+            except Exception as e:
+                logger.warning(f"Error in Groq chat: {e}")
+                ai_text = (
+                    "Hello! 👋 I am **Swiggy AI**, your intelligent assistant for Swiggy.\n\n"
+                    "Here is what I can help you with:\n"
+                    "• 🍔 **Food Delivery**: Craving something delicious? Search dishes and order from top restaurants.\n"
+                    "• 🛒 **Instamart**: Need groceries in 10 minutes? Get snacks, essentials, and fresh produce.\n"
+                    "• 🍽️ **Dineout**: Reserve dining tables and unlock exclusive restaurant discounts.\n"
+                    "• 📦 **Order Tracking**: Check your active deliveries and manage your cart anytime.\n\n"
+                    "What would you like to explore or order today? 😋"
+                )
+        else:
+            ai_text = (
+                "Hello! 👋 I am **Swiggy AI**, your intelligent assistant for Swiggy.\n\n"
+                "Here is what I can help you with:\n"
+                "• 🍔 **Food Delivery**: Craving something delicious? Search dishes and order from top restaurants.\n"
+                "• 🛒 **Instamart**: Need groceries in 10 minutes? Get snacks, essentials, and fresh produce.\n"
+                "• 🍽️ **Dineout**: Reserve dining tables and unlock exclusive restaurant discounts.\n"
+                "• 📦 **Order Tracking**: Check your active deliveries and manage your cart anytime.\n\n"
+                "What would you like to explore or order today? 😋"
+            )
+
+        return {
+            "response_text": ai_text,
+            "tool_calls": [],
+            "active_server": None,
+            "state": self.current_state,
+            "rankings": None,
+        }
+
     # ------------------------------------------------------------------ #
     #  Main query processing                                              #
     # ------------------------------------------------------------------ #
@@ -272,9 +360,10 @@ class OrchestratorRouter:
         """
         Process a natural language query:
         1. Check confirmation state
-        2. Score servers via prioritizer (context + LLM intent)
-        3. Resolve address
-        4. Route to registered handler
+        2. Handle conversational queries / greetings (Groq chat)
+        3. Score servers via prioritizer (context + LLM intent)
+        4. Resolve address
+        5. Route to registered handler
         """
         query_lower = query.strip().lower()
         tool_logs = []
@@ -284,9 +373,18 @@ class OrchestratorRouter:
         if confirm_response is not None:
             return confirm_response
 
+        # 1.5 Handle conversational greetings or self-introduction directly
+        if self._is_conversational_query(query):
+            return await self._handle_conversation(query, context)
+
         # 2. Get server rankings from Prioritizer
         rankings = await self.prioritizer.score_tasks(query, context)
         primary_server = rankings[0][0]
+
+        # If LLM classified intent as conversational chat
+        if primary_server == "chat":
+            return await self._handle_conversation(query, context)
+
         self.current_state["active_server"] = primary_server
 
         # 3. Resolve address (common step across all servers)

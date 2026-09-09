@@ -139,6 +139,14 @@ class ContextPrioritizer:
     def _keyword_fallback(self, query: str) -> Optional[Tuple[str, str]]:
         """Simple keyword matching fallback when LLM is unavailable."""
         query_lower = query.lower()
+        import re
+        q_clean = re.sub(r'[^\w\s]', '', query_lower).strip()
+
+        # Conversational greetings & identity inquiries
+        greetings = {"hi", "hello", "hey", "hola", "namaste", "sup", "yo", "howdy", "good morning", "good afternoon", "good evening"}
+        identity = ["who are you", "what are you", "what can you do", "introduce yourself", "tell me about yourself", "what is swiggy ai", "help", "help me", "how to use"]
+        if q_clean in greetings or any(i in q_clean for i in identity):
+            return "chat", "Conversational greeting or self-introduction request"
 
         # Direct service mentions take absolute precedence
         if "dineout" in query_lower:
@@ -185,7 +193,7 @@ class ContextPrioritizer:
         )
 
         try:
-            return await self.llm.classify(query=query, options=self.SERVERS, context=context_str)
+            return await self.llm.classify(query=query, options=["chat"] + self.SERVERS, context=context_str)
         except Exception as e:
             logger.warning(f"LLM intent classification failed: {e}")
             return None
@@ -224,6 +232,9 @@ class ContextPrioritizer:
                 intent_confidence = llm_result["confidence"]
                 intent_reasoning = f"LLM classified as '{intent_label}' — {llm_result.get('reasoning', '')}"
 
+                if intent_label == "chat":
+                    return [("chat", 1.0, intent_reasoning)]
+
                 intent_boost = self.config.get("intent_boost", 1.2) * intent_confidence
                 if intent_label in scores:
                     scores[intent_label] += intent_boost
@@ -232,6 +243,8 @@ class ContextPrioritizer:
                 kw_match = self._keyword_fallback(query)
                 if kw_match:
                     lbl, intent_reasoning = kw_match
+                    if lbl == "chat":
+                        return [("chat", 1.0, intent_reasoning)]
                     if lbl in scores:
                         scores[lbl] += self.config.get("intent_boost", 1.2)
 

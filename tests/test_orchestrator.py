@@ -159,3 +159,13 @@ def test_dish_relevance_scoring():
     score_nones_with_query = _score_dish_relevance(dish_with_nones, "sweet", rest_with_nones)
     assert score_nones_with_query >= 0.0
 
+
+# Test 8: Conversational greeting does not dump restaurant menus
+@pytest.mark.asyncio
+async def test_conversational_greeting(router):
+    res = await router.process_query("hi", {"address_id": "addr_home_001"})
+    assert res.get("active_server") is None
+    assert len(res.get("tool_calls", [])) == 0
+    assert "Swiggy AI" in res["response_text"]
+
+

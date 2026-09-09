@@ -79,14 +79,14 @@ class LLMClient:
                 "You are an intent classifier for Swiggy's multi-service platform. "
                 "Classify the user's query into exactly ONE option.\n\n"
                 "SERVICE DEFINITIONS:\n"
-                "- food: Ordering PREPARED meals, dishes, desserts, sweets, cakes, ice cream, or any cooked/ready-to-eat items from RESTAURANTS. "
-                "  Examples: 'something sweet', 'biryani', 'pizza', 'cake', 'dessert', 'ice cream', 'hungry', 'want to eat', 'lunch', 'dinner'.\n"
-                "- instamart: Buying RAW INGREDIENTS, packaged goods, household essentials from a GROCERY store. "
-                "  Examples: 'milk', 'eggs', 'sugar', 'detergent', 'vegetables', 'atta', 'cooking oil'.\n"
-                "- dineout: RESERVING a TABLE at a restaurant to eat there in person. "
-                "  Examples: 'book a table', 'restaurant reservation', 'dine out tonight', 'fine dining'.\n\n"
-                "IMPORTANT: If the user wants to EAT something (sweet, spicy, etc.), classify as 'food'. "
-                "Only classify as 'instamart' if they want to BUY raw/packaged grocery items.\n\n"
+                "- chat: Greetings ('hi', 'hello', 'hey'), pleasantries, agent identity questions ('who are you', 'what can you do', 'introduce yourself'), help requests, or general conversation WITHOUT a specific food, grocery, or dining request.\n"
+                "- food: Ordering PREPARED meals, dishes, desserts, sweets, cakes, ice cream, or any cooked/ready-to-eat items from RESTAURANTS. Examples: 'something sweet', 'biryani', 'pizza', 'cake', 'dessert', 'ice cream', 'hungry', 'lunch', 'dinner'.\n"
+                "- instamart: Buying RAW INGREDIENTS, packaged goods, household essentials from a GROCERY store. Examples: 'milk', 'eggs', 'sugar', 'detergent', 'vegetables', 'atta', 'bread'.\n"
+                "- dineout: RESERVING a TABLE at a restaurant to eat there in person. Examples: 'book a table', 'restaurant reservation', 'dine out tonight', 'fine dining'.\n\n"
+                "IMPORTANT: If the user is just greeting or asking who you are or what you do, classify as 'chat'. "
+                "If they want to eat or order prepared food, classify as 'food'. "
+                "If they want grocery/raw goods, classify as 'instamart'. "
+                "If they want a table reservation, classify as 'dineout'.\n\n"
                 "Return ONLY valid JSON: {\"label\": \"<option>\", \"reasoning\": \"<why>\", \"confidence\": <0.0-1.0>}. "
                 "No markdown, no explanation, just JSON."
             )
@@ -95,7 +95,7 @@ class LLMClient:
         if context:
             user_msg += f"\nContext: {context}"
 
-        response = await self._call(system_prompt, user_msg, max_tokens=120, temperature=0.1)
+        response = await self._call(system_prompt, user_msg, max_tokens=150, temperature=0.1)
         return self._parse_classification(response, options)
 
     async def extract_entities(self, query: str, schema: dict) -> dict:
@@ -153,6 +153,65 @@ class LLMClient:
 
         return await self._call(system_instruction, user_msg, max_tokens=350, temperature=0.3)
 
+    async def chat(
+        self,
+        query: str,
+        context: Optional[dict] = None,
+        system_instruction: str = "",
+    ) -> str:
+        """
+        Direct conversational chat using Groq model.
+        Introduces Swiggy AI, explains capabilities across Food, Instamart, and Dineout,
+        and engages warmly without prematurely showing food menus.
+        """
+        if not self.api_key and not self.fallback_api_key:
+            return (
+                "Hello! 👋 I am **Swiggy AI**, your personal assistant for Swiggy.\n\n"
+                "Here is what I can do for you:\n"
+                "• 🍔 **Food Delivery**: Craving something delicious? Search dishes and order from top restaurants.\n"
+                "• 🛒 **Instamart**: Need groceries in 10 minutes? Get snacks, essentials, and fresh produce.\n"
+                "• 🍽️ **Dineout**: Reserve dining tables and unlock exclusive restaurant discounts.\n"
+                "• 📦 **Order Tracking**: Check your active deliveries and manage your cart anytime.\n\n"
+                "What would you like to explore or order today? 😋"
+            )
+
+        if not system_instruction:
+            system_instruction = (
+                "You are Swiggy AI, the official intelligent assistant for Swiggy.\n"
+                "Your role is to converse naturally with the user, introduce yourself warmly, and guide them.\n\n"
+                "Swiggy Capabilities:\n"
+                "1. 🍔 Food Delivery: Finding dishes, curated cuisines from top restaurants, and instant add to cart.\n"
+                "2. 🛒 Instamart: 10-minute grocery delivery, daily essentials, snacks, dairy, and produce.\n"
+                "3. 🍽️ Dineout: Table reservations, discovering top venues, and exclusive dining discounts.\n"
+                "4. 📦 Order Management: Real-time live order tracking and cart checkout.\n\n"
+                "Tone & Style Guidelines:\n"
+                "- Greet the user warmly and introduce yourself as Swiggy AI.\n"
+                "- Clearly summarize how you can help using friendly bullet points and emojis.\n"
+                "- Invite the user to tell you what they're craving or what they need today.\n"
+                "- Do NOT output restaurant menus, dish catalogs, or pricing until the user specifically asks for food or groceries.\n"
+                "- Keep the response engaging, concise, and formatted in clean markdown."
+            )
+
+        user_msg = query
+        if context:
+            addr = context.get("address_label") or context.get("locality") or context.get("city")
+            if addr:
+                user_msg = f"{query}\n(User delivery location: {addr})"
+
+        try:
+            return await self._call(system_instruction, user_msg, max_tokens=400, temperature=0.7)
+        except Exception as e:
+            logger.warning(f"Groq chat call error: {e}. Returning friendly fallback.")
+            return (
+                "Hello! 👋 I am **Swiggy AI**, your personal assistant for Swiggy.\n\n"
+                "I'm here to help you with:\n"
+                "• 🍔 **Food Delivery**: Search top dishes & order from restaurants near you.\n"
+                "• 🛒 **Instamart**: 10-minute delivery for groceries, snacks & essentials.\n"
+                "• 🍽️ **Dineout**: Discover restaurants, reserve tables & get discounts.\n"
+                "• 📦 **Live Tracking**: Check real-time order status and cart.\n\n"
+                "What would you like to order or explore today? 😋"
+            )
+
     async def _call(self, system: str, user: str, max_tokens: int = 100, temperature: float = 0.1) -> str:
         """Make the actual API call with automatic provider failover."""
         # Attempt Primary Provider first
@@ -183,6 +242,19 @@ class LLMClient:
         self, base_url: str, model: str, api_key: str, system: str, user: str, max_tokens: int, temperature: float
     ) -> str:
         """Execute HTTP request to OpenAI-compatible endpoint."""
+        payload: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        # Disable reasoning think tags on Groq Qwen models for instant, parseable responses
+        if "api.groq.com" in base_url and "qwen" in model.lower():
+            payload["reasoning_effort"] = "none"
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{base_url}/chat/completions",
@@ -190,22 +262,25 @@ class LLMClient:
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                },
+                json=payload,
             )
+            # If reasoning_effort wasn't accepted, retry cleanly without it
+            if resp.status_code == 400 and "reasoning_effort" in payload:
+                del payload["reasoning_effort"]
+                resp = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"].strip()
             if "<think>" in content:
                 import re
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                content = re.sub(r"<think>.*?(?:</think>|$)", "", content, flags=re.DOTALL).strip()
             return content
 
     def _parse_classification(self, raw: str, options: list[str]) -> dict:

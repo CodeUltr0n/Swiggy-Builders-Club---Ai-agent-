@@ -948,7 +948,7 @@ async def track_order(order_id: str):
 # ============================================================
 #  Static Frontend
 # ============================================================
-app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+app.mount("/", StaticFiles(directory="frontend-v2/dist", html=True), name="frontend")
 
 # ============================================================
 #  Main

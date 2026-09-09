@@ -19,11 +19,6 @@ export default function App() {
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const messagesListRef = useRef(null);
 
-  // Hero Orchestration Demo: plays once per browser, dismissed on first real message
-  const [hasSeenDemo, setHasSeenDemo] = useState(() => {
-    try { return localStorage.getItem('swiggy_demo_seen') === 'true'; } catch { return false; }
-  });
-
   useEffect(() => {
     // Check real auth status on load
     fetch('/auth/status')
@@ -32,16 +27,6 @@ export default function App() {
         setIsAuthenticated(data.authenticated);
         if (data.authenticated) {
           fetchCart();
-          // Inject hero demo on first visit
-          if (!hasSeenDemo) {
-            setMessages([{
-              role: 'agent',
-              content: "Welcome to the **Swiggy MCP Control Plane**! 🎯\n\nI just ran the full orchestration pipeline to find you the best dinner options nearby. The routing engine scored all three MCP servers — **Food** came out on top with high confidence.\n\nTry asking me anything: *\"order biryani\"*, *\"get milk and eggs\"*, or *\"book a table for 2\"*.",
-              active_server: 'food',
-              rankings: [['food', 1.85], ['instamart', 0.52], ['dineout', 0.33]],
-              tool_calls: []
-            }]);
-          }
         }
       })
       .catch(() => setIsAuthenticated(false));
@@ -106,12 +91,6 @@ export default function App() {
     const textToSend = (typeof actionQuery === 'string' ? actionQuery : inputValue).trim();
     if (!textToSend) return;
 
-    // Dismiss hero demo on first real user message
-    if (!hasSeenDemo) {
-      setHasSeenDemo(true);
-      try { localStorage.setItem('swiggy_demo_seen', 'true'); } catch {}
-    }
-    
     const userMsg = { role: 'user', content: textToSend };
     setMessages(prev => [...prev, userMsg]);
     setInputValue('');

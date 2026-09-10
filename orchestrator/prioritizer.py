@@ -215,15 +215,28 @@ class ContextPrioritizer:
 
         intent_reasoning = "Scored by contextual signals (time, location, history)"
 
-        # Check for order tracking queries: boost the server of the most recent order in memory
-        track_kw = ["track", "status", "where is my", "order status", "booking status"]
+        # Check for order tracking queries: boost explicit server or most recent order
+        track_kw = ["track", "status", "where is my", "order status", "booking status", "delivery status", "where is the order", "where is my order", "where is my delivery"]
         is_track = any(kw in query.lower() for kw in track_kw)
-        if is_track and hasattr(self.memory, "get_past_orders"):
-            past = self.memory.get_past_orders(limit=1)
-            if past and past[0].get("server") in scores:
-                most_recent_server = past[0]["server"]
-                scores[most_recent_server] += 1.5
-                intent_reasoning = f"Tracking request for most recent {most_recent_server} order/booking ({past[0]['id']})"
+        if is_track:
+            target_server = None
+            q_lower = query.lower()
+            if "instamart" in q_lower or "grocery" in q_lower or "groceries" in q_lower:
+                target_server = "instamart"
+            elif "dineout" in q_lower or "table" in q_lower or "booking" in q_lower or "reservation" in q_lower:
+                target_server = "dineout"
+            elif "food" in q_lower or "restaurant" in q_lower or "meal" in q_lower:
+                target_server = "food"
+            elif hasattr(self.memory, "get_past_orders"):
+                past = self.memory.get_past_orders(limit=1)
+                if past and past[0].get("server") in scores:
+                    target_server = past[0]["server"]
+
+            if not target_server:
+                target_server = "food"
+
+            scores[target_server] += 1.5
+            intent_reasoning = f"Tracking request routed to {target_server}"
 
         # Check for cart inspection queries: boost server matching existing cart or intent
         cart_kw = ["cart", "cary", "basket", "my cart", "show cart", "view cart", "show my cart", "show my cary"]

@@ -918,20 +918,32 @@ async def track_order(order_id: str):
             orch = await get_orchestrator()
             mcp = getattr(orch, 'mcp_client', None)
             if mcp:
+                # If instamart order ID or prefix, query instamart track tool first
+                if "im" in order_id.lower() or "insta" in order_id.lower():
+                    im_res = await mcp.call_tool("instamart", "track_order", {"orderId": order_id})
+                    if im_res.get("success") and im_res.get("data"):
+                        return im_res["data"]
+
                 track_res = await mcp.call_tool("food", "track_food_order", {"orderId": order_id})
                 if track_res.get("success") and track_res.get("data"):
                     return track_res["data"]
+
+                # Try instamart fallback
+                im_res = await mcp.call_tool("instamart", "track_order", {"orderId": order_id})
+                if im_res.get("success") and im_res.get("data"):
+                    return im_res["data"]
         except Exception as e:
             logger.warning(f"MCP live tracking error: {e}")
 
     # Fallback to rich simulated live order tracking
+    is_im = "im" in order_id.lower() or "insta" in order_id.lower()
     return {
         "order_id": order_id,
-        "status": "PREPARING",
-        "step": 2,
-        "status_title": "Food is being prepared",
-        "status_subtitle": "Chef is preparing your order with fresh ingredients",
-        "eta": "24 mins",
+        "status": "OUT_FOR_DELIVERY" if is_im else "PREPARING",
+        "step": 3 if is_im else 2,
+        "status_title": "Order is out for delivery" if is_im else "Food is being prepared",
+        "status_subtitle": "Your delivery partner is heading to your location" if is_im else "Chef is preparing your order with fresh ingredients",
+        "eta": "12 mins" if is_im else "24 mins",
         "delivery_partner": {
             "name": "Kishore Kumar",
             "rating": "4.9★",
@@ -940,9 +952,9 @@ async def track_order(order_id: str):
         },
         "steps": [
             {"title": "Order Placed", "time": "Just now", "completed": True},
-            {"title": "Order Confirmed & Preparing", "time": "In progress", "completed": True, "active": True},
-            {"title": "Out for Delivery", "time": "Estimated 10 mins", "completed": False},
-            {"title": "Delivered", "time": "Estimated 24 mins", "completed": False}
+            {"title": "Order Confirmed & Packing" if is_im else "Order Confirmed & Preparing", "time": "In progress", "completed": True, "active": not is_im},
+            {"title": "Out for Delivery", "time": "Estimated 8 mins" if is_im else "Estimated 10 mins", "completed": is_im, "active": is_im},
+            {"title": "Delivered", "time": "Estimated 12 mins" if is_im else "Estimated 24 mins", "completed": False}
         ]
     }
 

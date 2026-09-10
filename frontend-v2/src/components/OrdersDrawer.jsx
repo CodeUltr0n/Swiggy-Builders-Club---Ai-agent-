@@ -89,7 +89,13 @@ export default function OrdersDrawer({ isOpen, onClose, onReorder }) {
 
   if (!isOpen) return null;
 
-  const allOrders = ordersData.orders || [];
+  // Merge local session orders and live Swiggy MCP orders without duplicates
+  const allOrders = [
+    ...(ordersData.orders || []),
+    ...(ordersData.mcp_orders || []).filter(mo => 
+      !(ordersData.orders || []).some(o => (o.id || o.order_id) === (mo.id || mo.orderId || mo.order_id))
+    )
+  ];
 
   return (
     <div className="modal-backdrop cart-backdrop" onClick={onClose}>

@@ -39,6 +39,13 @@ export function isConversationalOrQuestion(query) {
     return false;
   }
 
+  // Order tracking queries (track, status, where is my order) must ALWAYS go to backend orchestrator
+  const hasTrackAction = words.some(w => ['track', 'tracking', 'status'].includes(w)) || 
+                         (words.includes('where') && words.some(w => ['order', 'delivery', 'food', 'package', 'rider', 'meal', 'groceries', 'biryani', 'pizza'].includes(w)));
+  if (hasTrackAction) {
+    return false;
+  }
+
   // If user query mentions explicit food or grocery items, treat as order intent
   const hasOrderAction = words.some(w => ORDER_ACTION_KEYWORDS.has(w));
   if (hasOrderAction) {
@@ -82,9 +89,8 @@ export function isConversationalOrQuestion(query) {
     return true;
   }
 
-  // Fallback: If there are NO order action keywords, and the query is not a track/status request, route to chat.
+  // Fallback: If there are NO order action keywords, route to chat.
   // This ensures random questions ("tell me a joke", "who is dhoni") don't trigger food menus.
-  const hasTrackAction = words.some(w => ['track', 'status', 'where'].includes(w));
   if (!hasOrderAction && !hasTrackAction) {
     return true;
   }

@@ -267,9 +267,17 @@ def create_handler(client, router):
         query_lower = query.lower()
         address = context["resolved_address"]
 
+        # ---- Scenario 0: Clear cart ----
+        if any(w in query_lower for w in ["clear cart", "empty cart", "delete cart", "remove all"]):
+            return await _clear_cart(client, router, context, tool_logs)
+
         # ---- Scenario 1: Cart inquiry / view ----
-        if any(w in query_lower for w in ["cart", "basket", "where is the cart", "show cart", "view cart", "my cart"]) and not any(w in query_lower for w in ["add", "buy", "place"]):
-            return await _view_cart(client, router, address, tool_logs)
+        is_cart_view = (
+            any(w in query_lower for w in ["cart", "basket", "where is the cart", "show cart", "view cart", "my cart", "show my cart", "show my cary", "show cary"]) or
+            ("cary" in query_lower and any(w in query_lower for w in ["show", "my", "view", "check", "open"]))
+        ) and not any(w in query_lower for w in ["add", "buy", "place"])
+        if is_cart_view:
+            return await _view_cart(client, router, context, address, tool_logs)
 
         # ---- Scenario 2: Track order ----
         if any(w in query_lower for w in ["track", "order status", "delivery status", "where is my", "where is the order"]):
@@ -285,7 +293,21 @@ def create_handler(client, router):
     return handle
 
 
-async def _view_cart(client, router, address, tool_logs):
+async def _clear_cart(client, router, context, tool_logs):
+    """Clear all items from the Food cart."""
+    clear_res = await client.call_tool("food", "flush_food_cart", {})
+    tool_logs.append({"tool": "flush_food_cart", "args": {}, "result": clear_res})
+    if isinstance(context, dict) and context.get("session_cart"):
+        context["session_cart"]["items"] = []
+    return {
+        "response_text": "🗑️ **Your food cart has been cleared.**",
+        "tool_calls": tool_logs,
+        "active_server": "food",
+        "state": router.current_state,
+    }
+
+
+async def _view_cart(client, router, context, address, tool_logs):
     cart_res = await client.call_tool("food", "get_food_cart", {"addressId": address.get("id", "")})
     tool_logs.append({"tool": "get_food_cart", "args": {"addressId": address.get("id", "")}, "result": cart_res})
 
@@ -296,6 +318,13 @@ async def _view_cart(client, router, address, tool_logs):
         if isinstance(c_data, dict):
             items = c_data.get("items", [])
             total = c_data.get("cartTotal") or c_data.get("total") or 0
+
+    # Also check session_cart from frontend/server state
+    if not items and isinstance(context, dict) and context.get("session_cart"):
+        s_cart = context["session_cart"]
+        if isinstance(s_cart, dict) and s_cart.get("items"):
+            items = s_cart["items"]
+            total = s_cart.get("final_amount", s_cart.get("item_total", 0))
 
     if items:
         item_lines = "\n".join([f"• **{it.get('name')}** x{it.get('quantity', 1)} — ₹{it.get('price', 0)}" for it in items])

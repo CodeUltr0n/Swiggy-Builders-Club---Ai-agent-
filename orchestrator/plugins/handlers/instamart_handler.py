@@ -56,18 +56,100 @@ def create_handler(client, router):
         query_lower = query.lower()
         address = context["resolved_address"]
 
+        # ---- Clear cart ----
+        if any(w in query_lower for w in ["clear cart", "empty cart", "delete cart", "remove all"]):
+            return await _clear_cart(client, router, context, tool_logs)
+
+        # ---- Cart inquiry / view ----
+        is_cart_view = (
+            any(w in query_lower for w in ["show cart", "view cart", "my cart", "open cart", "what's in my cart", "whats in my cart", "check cart", "see cart", "show my cart", "show my cary", "show cary", "get cart", "what is in my cart"]) or
+            ("cart" in query_lower and not any(w in query_lower for w in ["add", "buy", "put", "insert", "item", "items"])) or
+            ("cary" in query_lower and any(w in query_lower for w in ["show", "my", "view", "check", "open"]))
+        )
+        if is_cart_view:
+            return await _view_cart(client, router, context, address, tool_logs)
+
         # ---- Track order ----
         if any(w in query_lower for w in ["track", "status"]):
             return await _track_order(client, router, tool_logs)
 
         # ---- Add to cart ----
-        if any(w in query_lower for w in ["add", "cart", "buy", "order"]):
-            return await _add_to_cart(client, router, query, address, tool_logs)
+        if any(w in query_lower for w in ["add", "buy", "order"]):
+            return await _add_to_cart(client, router, query, address, tool_logs, context)
 
         # ---- Search (default) ----
         return await _search_products(client, router, query, address, tool_logs, rankings)
 
     return handle
+
+
+async def _clear_cart(client, router, context, tool_logs):
+    """Clear all items from the Instamart cart."""
+    clear_res = await client.call_tool("instamart", "clear_cart", {})
+    tool_logs.append({"tool": "clear_cart", "args": {}, "result": clear_res})
+    if isinstance(context, dict) and context.get("session_cart"):
+        context["session_cart"]["items"] = []
+    return {
+        "response_text": "🗑️ **Your Instamart cart has been cleared.**",
+        "tool_calls": tool_logs,
+        "active_server": "instamart",
+        "state": router.current_state,
+    }
+
+
+async def _view_cart(client, router, context, address, tool_logs):
+    """Inspect user's Instamart cart without triggering random product search."""
+    items = []
+    total_val = 0
+    delivery_charge = 0
+
+    # 1. Check session_cart from frontend/server state
+    s_cart = context.get("session_cart") if isinstance(context, dict) else None
+    if s_cart and isinstance(s_cart, dict) and s_cart.get("items"):
+        items = s_cart["items"]
+        total_val = s_cart.get("final_amount", s_cart.get("item_total", 0))
+        delivery_charge = s_cart.get("delivery_fee", 0)
+
+    # 2. If not found in session_cart, query real/sim Instamart MCP cart
+    if not items:
+        cart_res = await client.call_tool("instamart", "get_cart", {
+            "selectedAddressId": address.get("id", "")
+        })
+        tool_logs.append({"tool": "get_cart", "args": {"selectedAddressId": address.get("id", "")}, "result": cart_res})
+        if cart_res.get("success") and cart_res.get("data"):
+            cart_data = cart_res["data"]
+            if isinstance(cart_data, dict):
+                raw_items = cart_data.get("items", [])
+                if isinstance(raw_items, list) and raw_items:
+                    items = raw_items
+                    total_val = cart_data.get("grand_total", cart_data.get("total", 0))
+                    delivery_charge = cart_data.get("delivery_charge", 0)
+
+    if items:
+        items_str = "\n".join([f"• **{it.get('name', 'Grocery Item')}** x{it.get('quantity', 1)} — ₹{it.get('price', 0)}" for it in items if isinstance(it, dict)])
+        return {
+            "response_text": (
+                f"🛒 **Your Instamart Cart** ({len(items)} items):\n\n"
+                f"{items_str}\n\n"
+                f"• Delivery: ₹{delivery_charge} (Free above ₹199)\n"
+                f"• **Grand Total: ₹{total_val}**\n\n"
+                f"💡 *Click the **[🛍️ Cart]** button in the navigation bar or reply **'checkout'** to complete your order.*"
+            ),
+            "tool_calls": tool_logs,
+            "active_server": "instamart",
+            "state": router.current_state,
+        }
+
+    return {
+        "response_text": (
+            "🛒 **Your Instamart cart is currently empty.**\n\n"
+            "• Search for snacks, dairy, fruits, or daily essentials (e.g. *'Amul milk'*, *'chips'*).\n"
+            "• To add an item, click **[+ Add to Cart]** on any product card or reply: *'add 1 milk'*."
+        ),
+        "tool_calls": tool_logs,
+        "active_server": "instamart",
+        "state": router.current_state,
+    }
 
 
 async def _search_products(client, router, query, address, tool_logs, rankings):
@@ -84,9 +166,12 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
         match = re.search(r'(?:search|find|need|buy|get|want)\s+(.+?)(?:\s*(?:near|for|please|on instamart)|$)', query.lower())
         search_query = match.group(1).strip() if match else query.lower()
 
-    # Strip conversational filler: 'me', 'some', 'a', 'an', 'need', 'buy'
-    search_query = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|need\s+|buy\s+|get\s+)+', '', search_query.strip(), flags=re.IGNORECASE).strip()
+    # Strip conversational filler: 'show me', 'show', 'view', 'me', 'some', 'a', 'an', 'need', 'buy', 'get'
+    search_query = re.sub(r'^(?:show\s+me\s+|show\s+|view\s+|me\s+|some\s+|a\s+|an\s+|need\s+|buy\s+|get\s+)+', '', search_query.strip(), flags=re.IGNORECASE).strip()
     search_query = re.sub(r'\s+on\s+instamart.*$', '', search_query, flags=re.IGNORECASE).strip()
+
+    if search_query in ["cart", "cary", "my cart", "my cary"]:
+        return await _view_cart(client, router, {}, address, tool_logs)
 
     if not search_query:
         search_query = "groceries"
@@ -207,7 +292,7 @@ async def _search_products(client, router, query, address, tool_logs, rankings):
     }
 
 
-async def _add_to_cart(client, router, query, address, tool_logs):
+async def _add_to_cart(client, router, query, address, tool_logs, context=None):
     """Add products to Instamart cart. LLM extracts item + quantity."""
     quantity = 1
     item_name = ""
@@ -231,6 +316,12 @@ async def _add_to_cart(client, router, query, address, tool_logs):
             item_name = re.sub(r'\s+on\s+instamart.*$', '', item_name, flags=re.IGNORECASE).strip()
 
     item_name = re.sub(r'^(?:me\s+|some\s+|a\s+|an\s+|packet\s+of\s+|packets\s+of\s+|bottle\s+of\s+|bottles\s+of\s+)+', '', item_name.strip(), flags=re.IGNORECASE).strip()
+
+    # Guard against cart view phrases mistakenly reaching _add_to_cart
+    cleaned_name = item_name.lower().strip()
+    cart_inquiry_phrases = {"cart", "cary", "my cart", "my cary", "show cart", "show my cart", "show my cary", "view cart", "the cart", "open cart"}
+    if not cleaned_name or cleaned_name in cart_inquiry_phrases or (len(cleaned_name) <= 4 and "car" in cleaned_name):
+        return await _view_cart(client, router, context or {}, address, tool_logs)
 
     if not item_name:
         return {

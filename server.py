@@ -461,6 +461,8 @@ async def chat(request: Request):
     body = await request.json()
     query = body.get("query", "")
     context = body.get("context", {})
+    if "session_cart" not in context:
+        context["session_cart"] = _calculate_cart_bill()
 
     if not query:
         return JSONResponse({"error": "Missing 'query' field"}, status_code=400)

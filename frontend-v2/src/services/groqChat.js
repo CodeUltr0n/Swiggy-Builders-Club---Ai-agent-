@@ -14,7 +14,8 @@ const ORDER_ACTION_KEYWORDS = new Set([
   'milk', 'eggs', 'egg', 'bread', 'butter', 'cheese', 'grocery', 'groceries', 'vegetables',
   'fruits', 'tomato', 'onion', 'potato', 'atta', 'rice', 'dal', 'oil', 'sugar', 'salt',
   'table', 'reserve', 'reservation', 'dineout', 'booking', 'restaurant near me',
-  'food', 'order', 'buy', 'hungry', 'crave', 'craving', 'menu', 'restaurant', 'find', 'show', 'get', 'want', 'eat'
+  'food', 'order', 'buy', 'hungry', 'crave', 'craving', 'menu', 'restaurant', 'find', 'show', 'get', 'want', 'eat',
+  'cart', 'cary', 'basket', 'checkout'
 ]);
 
 /**
@@ -26,6 +27,17 @@ export function isConversationalOrQuestion(query) {
   const qLower = query.trim().toLowerCase();
   const qClean = qLower.replace(/[^\w\s]/g, ' ').trim();
   const words = qClean.split(/\s+/).filter(Boolean);
+
+  // Order confirmations (yes/no/confirm/cancel) must ALWAYS go to the backend state machine
+  const CONFIRMATION_KEYWORDS = new Set(['yes', 'no', 'y', 'n', 'confirm', 'cancel', 'ok', 'okay', 'sure', 'proceed', 'place', 'stop', 'nope', 'nah']);
+  if (words.length <= 3 && words.some(w => CONFIRMATION_KEYWORDS.has(w))) {
+    return false;
+  }
+
+  // Cart operations (show cart, view cart, my cart, cary) must ALWAYS go to backend orchestrator
+  if (words.some(w => ['cart', 'cary', 'basket'].includes(w))) {
+    return false;
+  }
 
   // If user query mentions explicit food or grocery items, treat as order intent
   const hasOrderAction = words.some(w => ORDER_ACTION_KEYWORDS.has(w));

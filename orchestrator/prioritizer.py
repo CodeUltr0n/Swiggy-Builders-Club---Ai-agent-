@@ -217,15 +217,28 @@ class ContextPrioritizer:
 
         # Check for order tracking queries: boost the server of the most recent order in memory
         track_kw = ["track", "status", "where is my", "order status", "booking status"]
-        if any(kw in query.lower() for kw in track_kw) and hasattr(self.memory, "get_past_orders"):
+        is_track = any(kw in query.lower() for kw in track_kw)
+        if is_track and hasattr(self.memory, "get_past_orders"):
             past = self.memory.get_past_orders(limit=1)
             if past and past[0].get("server") in scores:
                 most_recent_server = past[0]["server"]
                 scores[most_recent_server] += 1.5
                 intent_reasoning = f"Tracking request for most recent {most_recent_server} order/booking ({past[0]['id']})"
 
+        # Check for cart inspection queries: boost server matching existing cart or intent
+        cart_kw = ["cart", "cary", "basket", "my cart", "show cart", "view cart", "show my cart", "show my cary"]
+        is_cart = any(kw in query.lower() for kw in cart_kw) and not any(kw in query.lower() for kw in ["add", "buy", "place"])
+        if is_cart:
+            cart_server = "instamart" if "instamart" in query.lower() else ("food" if "food" in query.lower() else None)
+            if not cart_server and isinstance(context, dict) and context.get("session_cart"):
+                cart_server = context["session_cart"].get("cart_type", "food")
+            if not cart_server:
+                cart_server = "food"
+            scores[cart_server] += 1.5
+            intent_reasoning = f"Cart inquiry routed to {cart_server}"
+
         # Layer 6: LLM intent classification (or keyword fallback)
-        if not any(kw in query.lower() for kw in track_kw):
+        if not is_track and not is_cart:
             llm_result = await self._llm_intent(query, context)
             if llm_result and llm_result.get("confidence", 0) > 0:
                 intent_label = llm_result["label"]

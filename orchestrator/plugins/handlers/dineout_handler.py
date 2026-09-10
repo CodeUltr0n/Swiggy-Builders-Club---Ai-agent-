@@ -29,7 +29,7 @@ def create_handler(client, router):
                 "response_text": (
                     "🍽️ **Dineout is for restaurant table bookings and dining out**, which don't use a delivery cart!\n\n"
                     "• To book a table, click **[Book Table]** on any restaurant card below.\n"
-                    "• To view your delivery cart for Food or Instamart, click the **[🛍️ Cart]** button in the top navigation bar (top-right next to Orders)."
+                    "• To view your delivery cart for Food or Instamart, click the **[🛍️ Cart]** button in the bottom navigation bar."
                 ),
                 "tool_calls": tool_logs,
                 "active_server": "dineout",

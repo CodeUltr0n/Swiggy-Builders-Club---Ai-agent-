@@ -332,13 +332,13 @@ async def _view_cart(client, router, context, address, tool_logs):
             f"🛒 **Your Swiggy Food Cart** ({len(items)} items):\n\n"
             f"{item_lines}\n\n"
             f"**To Pay**: ₹{total}\n\n"
-            f"💡 *Click the **[🛍️ Cart]** button in the top navigation bar or the floating bar below to open your cart drawer and checkout!*"
+            f"💡 *Click the **[🛍️ Cart]** button in the bottom navigation bar to open your cart drawer and checkout!*"
         )
     else:
         text = (
             f"🛒 **Your cart is currently empty.**\n\n"
             f"• To add food or groceries, click **[+ ADD]** on any dish or product card.\n"
-            f"• You can open the cart drawer anytime by clicking the **[🛍️ Cart]** button in the top navigation bar (top-right next to Orders)."
+            f"• You can open the cart drawer anytime by clicking the **[🛍️ Cart]** button in the bottom navigation bar."
         )
 
     return {
@@ -384,7 +384,7 @@ async def _track_order(client, router, context, address, tool_logs):
                 f"• Status: **{status_str}**\n"
                 f"• Delivery Partner: **{rider_name}** ({rider_phone})\n"
                 f"• ETA: **{eta_val} mins**\n\n"
-                f"💡 *Click the **[📦 Orders]** button in the navigation bar anytime to view real-time delivery milestones.*"
+                f"💡 *Click the **[📦 Orders]** button in the bottom navigation bar anytime to view real-time delivery milestones.*"
             ),
             "tool_calls": tool_logs,
             "active_server": "food",
@@ -395,7 +395,7 @@ async def _track_order(client, router, context, address, tool_logs):
         "response_text": (
             "🛵 **No active food orders found to track.**\n\n"
             "• To order delicious food, search for dishes like *'Biryani'* or *'Pizza'*.\n"
-            "• You can also view past orders in the **[📦 Orders]** drawer in the top navigation bar."
+            "• You can also view past orders in the **[📦 Orders]** drawer in the bottom navigation bar."
         ),
         "tool_calls": tool_logs,
         "active_server": "food",

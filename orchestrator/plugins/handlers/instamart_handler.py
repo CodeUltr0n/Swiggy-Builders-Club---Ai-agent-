@@ -133,7 +133,7 @@ async def _view_cart(client, router, context, address, tool_logs):
                 f"{items_str}\n\n"
                 f"• Delivery: ₹{delivery_charge} (Free above ₹199)\n"
                 f"• **Grand Total: ₹{total_val}**\n\n"
-                f"💡 *Click the **[🛍️ Cart]** button in the navigation bar or reply **'checkout'** to complete your order.*"
+                f"💡 *Click the **[🛍️ Cart]** button in the bottom navigation bar or reply **'checkout'** to complete your order.*"
             ),
             "tool_calls": tool_logs,
             "active_server": "instamart",
@@ -490,7 +490,7 @@ async def _track_order(client, router, context, tool_logs):
         "response_text": (
             "📦 **No active Instamart orders found to track.**\n\n"
             "• If you recently placed an order, it will appear here once confirmed.\n"
-            "• You can also open the **[📦 Orders]** drawer in the top navigation bar to view your order history."
+            "• You can also open the **[📦 Orders]** drawer in the bottom navigation bar to view your order history."
         ),
         "tool_calls": tool_logs,
         "active_server": "instamart",

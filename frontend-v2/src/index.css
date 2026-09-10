@@ -3523,3 +3523,244 @@ button, a, input, [role="button"], [role="tab"], .btn, .card-btn, .entity-card, 
   text-decoration: underline;
 }
 
+/* PWA Install Button & Modal */
+.install-pwa-btn {
+  background: rgba(4, 24, 15, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  padding: 4px 10px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 12px rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  white-space: nowrap;
+}
+
+.install-pwa-btn:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(52, 211, 153, 0.45);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(16, 185, 129, 0.3);
+}
+
+.install-pwa-btn:active {
+  transform: scale(0.96);
+}
+
+.install-icon-dot-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.install-pwa-icon {
+  color: #34d399;
+}
+
+.install-pulse-glow {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 5px #34d399;
+  animation: liveGpsPulse 2s infinite;
+}
+
+.install-pwa-chip {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  padding: 5px 12px;
+  font-size: 11px;
+  border-radius: 18px;
+}
+
+.install-pwa-chip:hover {
+  background: rgba(16, 185, 129, 0.24);
+  border-color: rgba(52, 211, 153, 0.6);
+}
+
+/* Compact PWA Guide Modal */
+.pwa-guide-modal-card {
+  position: relative;
+  background: rgba(4, 24, 15, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  max-width: 350px;
+  width: calc(100% - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  animation: modalSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #ffffff;
+}
+
+.pwa-guide-header {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pwa-guide-title-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pwa-guide-title-box h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.pwa-close-btn {
+  position: static;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.pwa-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+.pwa-close-btn:active {
+  transform: scale(0.92);
+}
+
+.pwa-guide-body {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pwa-guide-intro {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.4;
+  margin: 0 0 2px;
+}
+
+.pwa-step-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.pwa-step-number {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.25);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #34d399;
+  font-weight: 800;
+  font-size: 10.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pwa-step-content {
+  flex: 1;
+}
+
+.pwa-step-heading {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+.pwa-step-sub {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: 1px;
+  line-height: 1.35;
+}
+
+.inline-ios-icon {
+  color: #34d399;
+  display: inline-block;
+  vertical-align: -2px;
+  margin: 0 2px;
+}
+
+.pwa-features-pill {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 9.5px;
+  color: #34d399;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.pwa-guide-gotit-btn {
+  width: 100%;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12.5px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  margin-top: 3px;
+}
+
+.pwa-guide-gotit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+}
+
+.pwa-guide-gotit-btn:active {
+  transform: scale(0.97);
+}
+
+.header-actions-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+

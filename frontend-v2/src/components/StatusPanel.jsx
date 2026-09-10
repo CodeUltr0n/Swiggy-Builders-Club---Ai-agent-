@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Shield, MapPin, Navigation, Search, Check, X, RefreshCw, ChevronDown } from 'lucide-react';
+import InstallPwaButton from './InstallPwaButton';
 
 export default function StatusPanel({ 
   activeLocation, 
@@ -304,38 +305,42 @@ export default function StatusPanel({
           <span className="location-change-tag">Change</span>
         </button>
 
-        {/* Single Small MCP Status Indicator (Expands on Tap) */}
-        <div className="mcp-dropdown-container" ref={mcpDropdownRef}>
-          <button 
-            type="button"
-            className={`mcp-compact-badge ${isMcpOpen ? 'active' : ''}`}
-            onClick={() => setIsMcpOpen(prev => !prev)}
-            title="Tap to see MCP server status"
-            aria-label="MCP Server Status"
-            aria-expanded={isMcpOpen}
-          >
-            <div className={`status-dot ${getOverallMcpStatus()}`}></div>
-            <span className="mcp-badge-label">MCP</span>
-            <ChevronDown size={12} className={`mcp-chevron ${isMcpOpen ? 'rotated' : ''}`} />
-          </button>
+        <div className="header-actions-cluster">
+          <InstallPwaButton />
 
-          {isMcpOpen && (
-            <div className="mcp-popover-menu">
-              <div className="mcp-popover-header">
-                <Shield size={13} color="var(--orange-primary)" />
-                <span>ACTIVE MCP SERVERS</span>
+          {/* Single Small MCP Status Indicator (Expands on Tap) */}
+          <div className="mcp-dropdown-container" ref={mcpDropdownRef}>
+            <button 
+              type="button"
+              className={`mcp-compact-badge ${isMcpOpen ? 'active' : ''}`}
+              onClick={() => setIsMcpOpen(prev => !prev)}
+              title="Tap to see MCP server status"
+              aria-label="MCP Server Status"
+              aria-expanded={isMcpOpen}
+            >
+              <div className={`status-dot ${getOverallMcpStatus()}`}></div>
+              <span className="mcp-badge-label">MCP</span>
+              <ChevronDown size={12} className={`mcp-chevron ${isMcpOpen ? 'rotated' : ''}`} />
+            </button>
+
+            {isMcpOpen && (
+              <div className="mcp-popover-menu">
+                <div className="mcp-popover-header">
+                  <Shield size={13} color="var(--orange-primary)" />
+                  <span>ACTIVE MCP SERVERS</span>
+                </div>
+                <div className="mcp-popover-list">
+                  {Object.entries(servers).map(([name, status]) => (
+                    <div key={name} className="mcp-popover-item">
+                      <div className={`status-dot ${getStatusClass(status)}`}></div>
+                      <span className="popover-server-name">{name}</span>
+                      <span className={`popover-server-status ${getStatusClass(status)}`}>{getStatusString(status)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="mcp-popover-list">
-                {Object.entries(servers).map(([name, status]) => (
-                  <div key={name} className="mcp-popover-item">
-                    <div className={`status-dot ${getStatusClass(status)}`}></div>
-                    <span className="popover-server-name">{name}</span>
-                    <span className={`popover-server-status ${getStatusClass(status)}`}>{getStatusString(status)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

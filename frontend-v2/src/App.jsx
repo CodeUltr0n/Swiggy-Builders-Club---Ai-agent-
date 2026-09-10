@@ -8,6 +8,7 @@ import OrdersDrawer from './components/OrdersDrawer';
 import BottomNav from './components/BottomNav';
 import { isConversationalOrQuestion, fetchGroqChat } from './services/groqChat';
 import { Send, ArrowRight, Sparkles } from 'lucide-react';
+import InstallPwaButton from './components/InstallPwaButton';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -325,6 +326,10 @@ export default function App() {
             <span>Connect Swiggy Account</span>
             <ArrowRight size={17} />
           </a>
+
+          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'center' }}>
+            <InstallPwaButton variant="chip" />
+          </div>
 
           <div className="auth-footer-credits">
             Powered by <span className="credit-highlight-orange">Swiggy MCP</span> &bull; Developed by{' '}

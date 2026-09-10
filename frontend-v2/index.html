@@ -17,6 +17,15 @@
     <meta name="apple-mobile-web-app-title" content="Swiggy MCP" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
+
+    <!-- Immediate capture of PWA beforeinstallprompt so it is never missed -->
+    <script>
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        window.dispatchEvent(new Event('pwa-prompt-ready'));
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

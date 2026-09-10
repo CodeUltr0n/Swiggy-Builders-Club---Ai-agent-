@@ -295,7 +295,7 @@ export default function App() {
         <div className="auth-glass-card">
           <img src="/swiggy_avatar.png" alt="Swiggy AI" className="auth-logo" />
           <div className="auth-badge">
-            <Sparkles size={13} color="#fb923c" />
+            <Sparkles size={13} color="#34d399" />
             <span>Autonomous MCP Router</span>
           </div>
           <h1 className="auth-title">Swiggy AI Control Plane</h1>

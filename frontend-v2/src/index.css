@@ -3393,13 +3393,13 @@ button, a, input, [role="button"], [role="tab"], .btn, .card-btn, .entity-card, 
   max-width: 440px;
   width: 100%;
   text-align: center;
-  background: rgba(22, 21, 30,);
+  background: rgba(4, 24, 15, 0.82);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border: 1.5px solid rgba(16, 185, 129, 0.35);
+  border: 1.5px solid rgba(16, 185, 129, 0.40);
   border-radius: 28px;
   padding: 36px 28px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(252, 128, 25, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(16, 185, 129, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.30);
   animation: fadeInScale 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -3418,9 +3418,9 @@ button, a, input, [role="button"], [role="tab"], .btn, .card-btn, .entity-card, 
   gap: 6px;
   padding: 5px 14px;
   border-radius: 9999px;
-  background: rgba(252, 128, 25, 0.12);
-  border: 1px solid rgba(252, 128, 25, 0.3);
-  color: #fb923c;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #34d399;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.2px;
@@ -3512,14 +3512,14 @@ button, a, input, [role="button"], [role="tab"], .btn, .card-btn, .entity-card, 
 }
 
 .auth-footer-credits a {
-  color: #fb923c;
+  color: #34d399;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.15s ease;
 }
 
 .auth-footer-credits a:hover {
-  color: #fdba74;
+  color: #6ee7b7;
   text-decoration: underline;
 }
 

@@ -14,9 +14,13 @@
 
 <br>
 
-<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ" target="_blank">
-  <img src="https://i.ytimg.com/vi/Ph9Zgz69DKQ/maxresdefault.jpg" width="600" alt="MCP Orchestrator Demo Video" />
+<a href="https://youtu.be/8W6jmgECRfo" target="_blank">
+  <img src="https://i.ytimg.com/vi/8W6jmgECRfo/maxresdefault.jpg" width="600" alt="Swiggy MCP Orchestrator — Product Demo" />
 </a>
+
+<br>
+
+🎬 **Product Demo — Deployed with Swiggy**
 
 </div>
 
@@ -183,12 +187,22 @@ python -m orchestrator
 
 ---
 
-## Demo Walkthrough
+## Demo Videos
 
 <div align="center">
-<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
-  <img src="https://img.shields.io/badge/▶%20PLAY%20VIDEO-Watch%20on%20YouTube-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Play Video">
+
+### 🚀 Product Demo — Deployed with Swiggy
+<a href="https://youtu.be/8W6jmgECRfo">
+  <img src="https://img.shields.io/badge/▶%20PRODUCT%20DEMO-Watch%20on%20YouTube-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Product Demo">
 </a>
+
+<br><br>
+
+### 🔧 Engineering Deep Dive
+<a href="https://www.youtube.com/watch?v=Ph9Zgz69DKQ">
+  <img src="https://img.shields.io/badge/▶%20ENGINEERING%20DEMO-Watch%20on%20YouTube-grey?style=for-the-badge&logo=youtube&logoColor=white" alt="Engineering Demo">
+</a>
+
 </div>
 
 ---
